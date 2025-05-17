@@ -1,0 +1,16 @@
+{
+  "name": "flashcards",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "jsx-compiler": "^0.4.37",
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "lib": ["es2017", "dom"],
+    "noImplicitAny": true,
+    "strict": true,
+    "jsx": "react",
+    "jsxFactory": "renderUI.createElement",
+    "jsxFragmentFactory": "renderUI.fragment",
+    "outDir": "dist",
+    "target": "esnext",
+    "module": "umd"
+  }
+}

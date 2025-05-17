@@ -1,0 +1,11 @@
+body {
+  display: flex;
+  flex-direction: column;
+  margin-top: 1in;
+}
+body > * {
+  margin: 10px auto;
+}
+td {
+  padding: 0 12px;
+}
