@@ -177,7 +177,7 @@ export function FlashCards({ cards: cardsProp, name, chooseDeck, saveDeck }: Fla
       >
         <table>{nextRoundCards.map((e, i) => <tr key={i}><td>{e.front}</td><td>{e.back}</td></tr>)}</table>
       </div>
-      <div>{showSaveModal && <SaveAnswers name={name} cards={cards} saveDeck={saveDeck} close={() => setShowSaveModal(false)} />}</div>
+      {showSaveModal && <SaveAnswers name={name} cards={cards} saveDeck={saveDeck} close={() => setShowSaveModal(false)} />}
     </>
   );
 }

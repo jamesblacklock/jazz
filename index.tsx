@@ -313,4 +313,4 @@ function App(props: any, state: State) {
   return <ChooseDeck deckIndex={deckIndex} chooseDeck={deck => setDeck(deck)}/>
 }
 
-renderUI(document.body, App);
+renderUI(document.body, <App />);

@@ -13,8 +13,8 @@ type SetterOptions = { dirty?: boolean, quiet?: boolean };
 type Setter<T> = (value: T, options?: SetterOptions) => void
 
 export class State {
-  target: HTMLElement;
-  component: UITagNode;
+  component?: UINode;
+  target?: HTMLElement;
   dirty: boolean = false;
   private state: Record<keyof any, any> = {};
   private effectCleanup: Record<keyof any, () => void> = {};
@@ -23,13 +23,11 @@ export class State {
   private quiet: Set<string> = new Set;
   private frame: number = 0;
   private renderOptions: RenderOptions;
-  private parentNode?: VNode | null;
+  private node?: VNode | null;
 
-  constructor(target: HTMLElement, component: UITagNode, parentNode: VNode | null | undefined, renderOptions: RenderOptions) {
-    this.target = target;
-    this.component = component;
-    this.parentNode = parentNode;
-    this.renderOptions = renderOptions;
+  constructor(node: VNode, renderOptions: RenderOptions) {
+    this.node = node;
+    this.renderOptions = renderOptions ?? {};
   }
   use<T>(name: string, value: T | (() => T), deps?: any[]): [T, Setter<T>] {
     return this.useInternal(name, value, deps, true, false);
@@ -102,85 +100,49 @@ export class State {
       this.quiet = new Set;
       if (!quiet) {
         this.dirty = true;
-        renderInternal(this.renderOptions, this.target, this.component, null, this.parentNode);
+        renderInternal({r: Symbol(), options: this.renderOptions}, this.node!, this.component!);
+        updateHtml(this.node!);
       }
     });
   }
 }
 
-type VNode = {
-  rc: number;
-  cc: number;
-  key?: any;
-  tag?: string | UINodeFunction;
-  nodes?: VNode[];
-  props?: Props;
-  state?: State;
-  html?: HTMLElement | Text;
-  elements?: HTMLElement[];
-  content?: UINode;
-};
 export type DebugInfo = { renderCount: number, debug?: boolean };
 export type Props = Record<keyof any, any>;
-export type UINodeFunction = <T extends Props>(props: T, state: State, debugInfo: DebugInfo) => UINode;
-export type UITagNode<T extends Props = Props> = {
-  tag: string | UINodeFunction;
+
+export type UINodeFunction = <T extends Props>(props: T, state: State, debugInfo: DebugInfo) => UINode[];
+
+export type UINode<T extends Props = Props> = {
+  type: UINodeFunction | string;
   props?: T;
+  content?: UINode | UINode[];
   key?: any;
 };
-export type SingleUINode = undefined | null | false | number | string | UINodeFunction | UITagNode;
 
-export type UINode = SingleUINode | SingleUINode[];
+type VNode = {
+  r?: Symbol;
+  cc: number;
+  component: UINode;
+  nodes: VNode[];
+  domNode?: Text|HTMLElement;
+  domParent: HTMLElement;
+  state?: State;
+};
 
-function findNode(parentVNode: VNode, content: UITagNode, nodesOut: VNode[]): VNode | undefined {
-  const match = parentVNode.nodes!.find(node =>
-    node.key === content.key && node.tag === content.tag && node.rc < parentVNode.rc
-  );
-  if (match) {
-    match.rc++;
-    nodesOut.push(match);
-  }
-  return match;
-}
+const DOM_ROOTS = new Map<Node, VNode>;
 
-function contentNotEqual(l: any, r: any) {
-  if (!(Array.isArray(l) && Array.isArray(r))) {
-    if (typeof l === "object" && typeof r === "object") {
-      return propsNotEqual(l?.props, r?.props);
-    }
-    return l !== r;
+function propsNotEqual(l: Props | undefined, r: Props | undefined, depth: number) {
+  if (l === r) {
+    return false;
   }
-  if (l.length !== r.length) {
-    return true;
-  }
-  for (let i=0; i<l.length; i++) {
-    if (contentNotEqual(l[i], r[i])) {
-      return true;
-    }
-  }
-  return false;
-}
-function recordNotEqual(l: Record<keyof any, any>, r: Record<keyof any, any>) {
-  const keys = Array.from(new Set([...Object.keys(l ?? {}), ...Object.keys(r ?? {})]));
-  if (keys.length < 1 || keys.length > 100) {
-    return l !== r;
-  }
-  for (const k of keys) {
-    if (l?.[k] !== r?.[k]) {
-      return true;
-    }
-  }
-  return false;
-}
-function propsNotEqual(l: Props | undefined, r: Props | undefined) {
-  const propNames = Array.from(new Set([...Object.keys(l ?? {}), ...Object.keys(r ?? {})]));
+  const propNames = Array.from(new Set([...Reflect.ownKeys(l ?? {}), ...Reflect.ownKeys(r ?? {})]));
+  let i = 0;
+  const limit = 20;
   for (const k of propNames) {
-    if (k === "content") {
-      if (contentNotEqual(l?.content, r?.content)) {
-        return true;
-      }
-    } else if (k === "style") {
-      if (recordNotEqual(l?.style, r?.style)) {
+    if (i++ >= limit) {
+      return true;
+    } else if (depth > 0 && l?.[k]?.constructor === Object && l?.[k]?.constructor === Object) {
+      if (propsNotEqual(l?.[k], r?.[k], depth-1)) {
         return true;
       }
     } else if (l?.[k] !== r?.[k]) {
@@ -190,142 +152,200 @@ function propsNotEqual(l: Props | undefined, r: Props | undefined) {
   return false;
 }
 
-function htmlNodeChanged(node: VNode, props?: Props) {
-  if (propsNotEqual(node.props, props)) {
+function contentNotEqual(l?: UINode, r?: UINode) {
+  if (l?.type !== r?.type) {
+    return true;
+  } else if (propsNotEqual(l?.props, r?.props, 1)) {
+    return true;
+  } else if (l?.key !== r?.key) {
+    return true;
+  }
+  const lContent = l?.content && (Array.isArray(l?.content) ? l.content : []);
+  const rContent = r?.content && (Array.isArray(r?.content) ? r.content : []);
+  if (lContent?.length !== rContent?.length) {
+    return true;
+  } else if (lContent?.length) {
+    for (let i=0; i<lContent.length; i++) {
+      if (contentNotEqual(lContent[i], rContent![i])) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function nodeChanged(node: VNode, component: UINode) {
+  if (node.cc === 0 || contentNotEqual(node.component, component)) {
     node.cc++;
     return true;
   }
   return false;
 }
 
-function removeNode(node: VNode) {
-  if (node.html) {
-    node.html.remove();
-    VNODES.delete(node.html);
+function getNode(parentNode: VNode, component: UINode, renderedNodes: VNode[]): VNode {
+  let node = parentNode.nodes.find(node =>
+    node.component.key === component.key && node.component.type === component.type && node.r !== parentNode.r
+  );
+  if (node) {
+    node.r = parentNode.r;
   } else {
-    node.state!.cleanup();
-    node.elements!.forEach(e => e.remove());
-    VNODES.delete(node);
+    node = {
+      r: parentNode.r,
+      cc: 0,
+      component: { type: component.type, key: component.key },
+      nodes: [],
+      domParent: (parentNode.domNode ?? parentNode.domParent) as HTMLElement,
+    };
+  }
+  renderedNodes.push(node);
+  return node;
+}
+
+function* reversed<T>(arr: T[]): Generator<T> {
+  for (let i=arr.length-1; i>=0; --i) {
+    yield arr[i];
   }
 }
 
-const VNODES = new Map<VNode | Node, VNode>;
-// (window as any).VNODES = VNODES;
-function renderInternal(
-  options: RenderOptions,
-  target: HTMLElement,
-  content: UINode,
-  nodes?: VNode[] | null,
-  nodeKey?: VNode | null,
-  elements?: HTMLElement[] | null,
-  key?: any,
-) {
-  let nodeKey2 = nodeKey ?? target;
-  let parentVNode = VNODES.get(nodeKey2);
-  if (!parentVNode) {
-    parentVNode = { nodes: [], rc: 0, cc: 0, key };
-    VNODES.set(nodeKey2, parentVNode);
+function updateHtml(node: VNode, nextSibling?: Node | null) {
+  const contained = node.domParent.contains(node.domNode ?? null);
+  const siblingMatches = node.domNode?.nextSibling === nextSibling;
+  if (node.domNode && !(contained && siblingMatches)) {
+    node.domParent.insertBefore(node.domNode, nextSibling ?? null);
   }
-  if (!nodes) {
-    parentVNode.rc++;
-    nodes = [];
+  let lastInserted: Node | null = null;
+  for (const childNode of reversed(node.nodes)) {
+    lastInserted = updateHtml(childNode, lastInserted) ?? lastInserted;
   }
-  if (content instanceof Function) {
-    content = [{ tag: content }];
-  } else if (!Array.isArray(content)) {
-    content = [content];
+
+  return node.domNode;
+}
+
+function removeNode(node: VNode) {
+  node.state?.cleanup();
+  if (node.domNode) {
+    node.domNode.remove();
+    return;
   }
-  for (let child of content as UINode[]) {
-    if (child == null || child === false) {
+  node.nodes.forEach(removeNode);
+}
+
+function renderChildren(state: RenderState, parent: VNode, children: UINode | UINode[] | undefined, renderedNodes: VNode[]) {
+  if (!children) {
+    return;
+  }
+  if (!Array.isArray(children)) {
+    children = [children];
+  }
+  for (const childComponent of children) {
+    if (Array.isArray(childComponent)) {
+      renderChildren(state, parent, childComponent, renderedNodes);
       continue;
     }
-    if (Array.isArray(child)) {
-      renderInternal(options, target, child, nodes, nodeKey, elements);
-      continue;
+    const childNode = getNode(parent, childComponent, renderedNodes);
+    if (nodeChanged(childNode, childComponent)) {
+      renderInternal(state, childNode, childComponent);
     }
-    if (child instanceof Function) {
-      child = { tag: child };
+  }
+}
+
+type RenderState = {
+  r: Symbol;
+  options: RenderOptions;
+}
+
+function renderInternal(state: RenderState, node: VNode, component: UINode) {
+  node.r = state.r;
+  const renderedNodes: VNode[] = [];
+  if (component.type === "TEXT") {
+    const textContent: string = (component.props?.textContent ?? "").toString();
+    if (!node.domNode) {
+      node.domNode = document.createTextNode(textContent);
     }
-    let node = findNode(parentVNode, child as UITagNode, nodes);
-    if (typeof child === "string" || typeof child === "number") {
-      if (node) {
-        if (node.content !== child) {
-          node.html!.textContent = node.content = child.toString();
-        }
-      } else {
-        node = { html: document.createTextNode(child.toString()), content: child, rc: parentVNode.rc, cc: 0 };
-        nodes.push(node);
-      }
-      target.appendChild(node.html!);
-      continue;
+    if (textContent !== node.domNode.textContent) {
+      node.domNode.textContent = textContent;
     }
-    const { tag, key, props } = child;
-    if (tag instanceof Function) {
-      if (node) {
-        node.state!.target = target;
-        node.state!.component = child;
-      } else {
-        node = { tag, key, state: new State(target, child, nodeKey, options), rc: parentVNode.rc, cc: 0 };
-        nodes.push(node);
-      }
-      node.content = (tag as UINodeFunction)(props ?? {}, node.state!, { debug: options.debug, renderCount: node.rc });
-      node.elements = [];
-      renderInternal(options, target, node.content, null, node, node.elements, key);
-      if (elements) {
-        elements.push(...node.elements);
-      }
-      continue;
+  } else if (typeof component.type === "string") {
+    if (!node.domNode) {
+      node.domNode = document.createElement(component.type);
     }
-    if (node) {
-      node.state!.component = child;
-    } else {
-      const element = document.createElement(tag);
-      node = { tag, key, state: new State(element, child, null, options), rc: parentVNode.rc, cc: 0, html: element };
-      nodes.push(node);
-      node.html!.remove();
+    if (!node.state) {
+      node.state = new State(node, state.options);
     }
-    if (elements) {
-      elements.push(node.html as HTMLElement);
-    }
-    if (node.state!.dirty || htmlNodeChanged(node, props)) {
+    node.state!.component = component;
+    const e = node.domNode as HTMLElement;
+    if (node.state!.dirty || nodeChanged(node, component)) {
       node.state!.dirty = false;
-      node.props = props;
-      HtmlTagComponent(props ?? {}, node.state!, node.html as HTMLElement, { debug: options.debug, renderCount: node.rc });
-      renderInternal(options, node.html as HTMLElement, props?.content, null, null, elements, key);
+      HtmlTagComponent(component.props ?? {}, node.state!, e, { debug: state.options?.debug, renderCount: node.cc });
+      renderChildren(state, node, component.content, renderedNodes);
+    }
+  } else {
+    if (!node.state) {
+      node.state = new State(node, state.options);
+    }
+    node.state!.component = component;
+    if (node.state!.dirty || nodeChanged(node, component)) {
+      node.state!.dirty = false;
+      component.content = component.type({content: component.content, ...component.props}, node.state!, { debug: state.options?.debug, renderCount: node.cc });
+      renderChildren(state, node, component.content, renderedNodes);
     }
   }
-  parentVNode.nodes!.forEach(n => n.rc < parentVNode.rc && removeNode(n));
-  for(const n of nodes) {
-    if (n.html) {
-      target.appendChild(n.html!);
+
+  for (const n of node.nodes) {
+    if (n.r !== node.r) {
+      removeNode(n);
     }
   }
-  parentVNode.nodes = nodes;
+
+  node.nodes = renderedNodes;
+  node.component = component;
+}
+
+function flattenContent(content: UINode[]): UINode[] {
+  const flattened = [];
+  for (const c of content) {
+    if (Array.isArray(c)) {
+      flattened.push(...flattenContent(c));
+    } else if (typeof c === "string") {
+      flattened.push({ type: "TEXT", props: { textContent: c } });
+    } else {
+      flattened.push(c);
+    }
+  }
+  return flattened;
+}
+
+renderUI.fragment = () => null as unknown as UINode[];
+renderUI.createElement = function<P extends {}>(
+  type: string | UINodeFunction,
+  props: P & { key?: any } | null, 
+  ...children: UINode[]
+): UINode | UINode[] {
+  const { key, ...restProps } = props ?? {};
+  if (type === renderUI.fragment) {
+    return flattenContent(children);
+  }
+  return {
+    type,
+    key,
+    props: restProps,
+    content: flattenContent(children),
+  };
 }
 
 export type RenderOptions = {
   debug?: boolean;
 };
 
-export default function renderUI(target: HTMLElement, content: any, options?: RenderOptions) {
-  renderInternal(options || {}, target, content);
-}
-
-renderUI.fragment = () => null;
-renderUI.createElement = function<P extends {}>(
-  tag: string | UINodeFunction,
-  props: P & { content?: UINode, key?: any } | null, 
-  ...children: any[]
-): UINode {
-  if (tag === renderUI.fragment) {
-    return children;
+export default function renderUI(domTarget: HTMLElement, component: UINode, options: RenderOptions = {}) {
+  let node = DOM_ROOTS.get(domTarget);
+  if (!node) {
+    node = { cc: 0, component: { type: component.type, key: component.key }, nodes: [], domParent: domTarget };
+    DOM_ROOTS.set(domTarget, node);
   }
-  const { key, content, ...restProps } = props ?? {};
-  return {
-    tag,
-    key,
-    props: { ...restProps, content: [content, ...children] },
-  };
+  node.component = { type: component.type, key: component.key };
+  renderInternal({r: Symbol(), options}, node, component);
+  updateHtml(node);
 }
 
 export type RefObject<T = any> = { current?: T };
@@ -349,10 +369,11 @@ function HtmlTagComponent<T extends keyof HTMLElementTagNameMap>(
 ) {
   const { events = {}, style, id, ref, className } = props;
   const [attachedEvents] = state.use<EventsMap>("events", {});
+  const [savedStyle, setSavedStyle] = state.use<StyleMap | undefined>("style", undefined);
   if (id) {
-    e.id = id
+    e.id = id;
   } else {
-    e.removeAttribute("id")
+    e.removeAttribute("id");
   }
   if (props.class ?? className) {
     e.className = props.class ?? className ?? "";
@@ -364,7 +385,7 @@ function HtmlTagComponent<T extends keyof HTMLElementTagNameMap>(
     if(events[event] !== attachedEvents[event]) {
       if (attachedEvents[event]) {
         e.removeEventListener(event, attachedEvents[event]);
-        delete attachedEvents[event]
+        delete attachedEvents[event];
       }
       if(events[event]) {
         e.addEventListener(event, events[event]);
@@ -372,10 +393,13 @@ function HtmlTagComponent<T extends keyof HTMLElementTagNameMap>(
       }
     }
   }
-  e.removeAttribute("style");
-  for (const prop in style) {
-    if (style[prop as any]) {
-      e.style[prop as any] = style[prop as any]!.toString();
+  if (propsNotEqual(style, savedStyle, 0)) {
+    setSavedStyle(style, { quiet: true });
+    e.removeAttribute("style");
+    for (const prop in style) {
+      if (style[prop as any]) {
+        e.style[prop as any] = style[prop as any]!.toString();
+      }
     }
   }
   if (ref) {
@@ -385,7 +409,7 @@ function HtmlTagComponent<T extends keyof HTMLElementTagNameMap>(
       ref.current = e;
     }
   }
-  
+
   if (debugInfo.debug) {
     e.setAttribute("data-render-count", debugInfo.renderCount.toString());
   }
