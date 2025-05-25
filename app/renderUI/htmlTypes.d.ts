@@ -1,7 +1,7 @@
 import { UIElement, Ref, UINode } from "./uiTypes";
 
-export type EventListenerWithTarget<T> = (e: Omit<Event, "target"> & { target: T }) => void;
-export type EventsMap<T extends keyof HTMLElementTagNameMap> = Partial<Record<keyof HTMLElementEventMap, EventListenerWithTarget<HTMLElementTagNameMap[T]>>>;
+export type EventListenerWithTarget<E extends Event, T> = (e: Omit<E, "target"> & { target: T }) => void;
+export type EventsMap<T extends keyof HTMLElementTagNameMap> = Partial<{ [K in keyof HTMLElementEventMap]: EventListenerWithTarget<HTMLElementEventMap[K], HTMLElementTagNameMap[T]> }>;
 export type StyleMap = Partial<Record<keyof CSSStyleDeclaration, string | number>>;
 export interface HtmlComponentProps<T extends keyof HTMLElementTagNameMap> extends JSX.IntrinsicAttributes {
   class?: string;

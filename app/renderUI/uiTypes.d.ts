@@ -1,4 +1,4 @@
-import type { State } from "./renderUI";
+import type { State } from "../renderUI";
 
 export type DebugInfo = { renderCount: number, debug?: boolean };
 export type Props = Record<keyof any, any>;

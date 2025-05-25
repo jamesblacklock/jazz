@@ -1,12 +1,12 @@
-export type * from "./htmlTypes";
-export type * from "./uiTypes";
+export type * from "./renderUI/htmlTypes";
+export type * from "./renderUI/uiTypes";
 import type {
   EventsMap,
   HtmlAProps,
   HtmlContentComponentProps,
   HtmlInputProps,
   StyleMap,
-} from "./htmlTypes";
+} from "./renderUI/htmlTypes";
 import type {
   DebugInfo,
   Props,
@@ -16,7 +16,7 @@ import type {
   ComponentFunction,
   ComponentType,
   RenderOptions,
-} from "./uiTypes";
+} from "./renderUI/uiTypes";
 
 type VNode = {
   r?: Symbol;
@@ -229,7 +229,7 @@ function* reversed<T>(arr: T[]): Generator<T> {
   }
 }
 
-function updateHtml(node: VNode, nextSibling?: Node | null) {
+function updateHtml(node: VNode, nextSibling?: Node | null): Node | null {
   const contained = node.domParent.contains(node.domNode ?? null);
   const siblingMatches = node.domNode?.nextSibling === nextSibling;
   if (node.domNode && !(contained && siblingMatches)) {
@@ -240,7 +240,7 @@ function updateHtml(node: VNode, nextSibling?: Node | null) {
     lastInserted = updateHtml(childNode, lastInserted) ?? lastInserted;
   }
 
-  return node.domNode;
+  return node.domNode ?? lastInserted;
 }
 
 function removeNode(node: VNode) {
@@ -266,7 +266,6 @@ function renderInternal(state: RenderState, node: VNode, component: Component) {
       node.domNode = document.createTextNode(textContent);
     }
     if (textContent !== node.domNode.textContent) {
-      console.log(":", textContent);
       node.domNode.textContent = textContent;
     }
   } else {
@@ -353,12 +352,12 @@ const htmlComponent: HtmlComponentFunction = function htmlComponent(e, props, st
   for (const event of eventNames) {
     if(events[event] !== attachedEvents[event]) {
       if (attachedEvents[event]) {
-        e.removeEventListener(event, attachedEvents[event] as any as EventListenerOrEventListenerObject);
+        e.removeEventListener(event, attachedEvents[event] as any as EventListener);
         delete attachedEvents[event];
       }
       if(events[event]) {
-        e.addEventListener(event, events[event] as any as EventListenerOrEventListenerObject);
-        attachedEvents[event] = events[event];
+        e.addEventListener(event, events[event] as any as EventListener);
+        attachedEvents[event] = events[event] as any;
       }
     }
   }

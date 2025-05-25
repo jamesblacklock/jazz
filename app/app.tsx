@@ -44,8 +44,13 @@ function SaveAnswers({ name, cards, saveDeck, close }: SaveAnswersProps, state: 
       }}
     >
       <h3>Save Missed Answers</h3>
-      <div><input style={{width: "300px"}} value={inputValue} events={{ input: e => {setInputValue(e.target.value); console.log(e.target.value)} }} /></div>
-      {inputValue}
+      <div>
+        <input
+          style={{width: "300px"}}
+          value={inputValue}
+          events={{ change: e => setInputValue(e.target.value) }}
+        />
+      </div>
       <div
         style={{
           display: "flex",
