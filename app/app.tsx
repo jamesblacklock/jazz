@@ -178,7 +178,11 @@ export function FlashCards({ cards: cardsProp, name, chooseDeck, saveDeck }: Fla
           gap: "12px",
         }}
       >
-        <table>{nextRoundCards.map((e, i) => <tr key={i}><td>{e.front}</td><td>{e.back}</td></tr>)}</table>
+        <table>
+          {nextRoundCards.map((e, i) => (
+            <tr key={i}><td style={{padding: "0 12px"}}>{e.front}</td><td style={{padding: "0 12px"}}>{e.back}</td></tr>
+          ))}
+        </table>
       </div>
       {showSaveModal && <SaveAnswers name={name} cards={cards} saveDeck={saveDeck} close={() => setShowSaveModal(false)} />}
     </>

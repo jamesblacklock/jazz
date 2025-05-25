@@ -175,33 +175,37 @@ function propsNotEqual(l: Props | undefined, r: Props | undefined, depth: number
 }
 
 function contentNotEqual(l?: Component, r?: Component) {
-  if (l?.type !== r?.type) {
-    return true;
+  let changed = false;
+  if (l?.changed) {
+    changed = true;
+  } else if (l?.type !== r?.type) {
+    changed = true;
   } else if (propsNotEqual(l?.props, r?.props, 1)) {
-    return true;
+    changed = true;
   } else if (l?.key !== r?.key) {
-    return true;
-  }
-  const lContent = l?.content && (Array.isArray(l?.content) ? l.content : []);
-  const rContent = r?.content && (Array.isArray(r?.content) ? r.content : []);
-  if (lContent?.length !== rContent?.length) {
-    return true;
-  } else if (lContent?.length) {
-    for (let i=0; i<lContent.length; i++) {
-      if (contentNotEqual(lContent[i], rContent![i])) {
-        return true;
+    changed = true;
+  } else {
+    const lContent = l?.content && (Array.isArray(l?.content) ? l.content : []);
+    const rContent = r?.content && (Array.isArray(r?.content) ? r.content : []);
+    if (lContent?.length !== rContent?.length) {
+      changed = true;
+    } else if (lContent?.length) {
+      for (let i=0; i<lContent.length; i++) {
+        if (contentNotEqual(lContent[i], rContent![i])) {
+          changed = true;
+          break;
+        }
       }
     }
   }
-  return false;
+  if (changed && l) {
+    l.changed = true;
+  }
+  return changed;
 }
 
 function nodeChanged(node: VNode, component: Component) {
-  if (node.cc === 0 || contentNotEqual(node.component, component)) {
-    node.cc++;
-    return true;
-  }
-  return false;
+  return node.cc === 0 || node.state?.dirty || contentNotEqual(node.component, component);
 }
 
 function getNode(parentNode: VNode, component: Component, renderedNodes: VNode[]): VNode {
@@ -276,7 +280,7 @@ function renderInternal(state: RenderState, node: VNode, component: Component) {
       node.state = new State(node, state.options);
       node.state!.component = component;
     }
-    if (node.state!.dirty || nodeChanged(node, component)) {
+    if (nodeChanged(node, component)) {
       node.state!.dirty = false;
       let componentFactory: ComponentFunction = typeof component.type === "string"
         ? (HTML_COMPONENT[component.type] ?? htmlComponent).bind(null, node.domNode as HTMLElement) as ComponentFunction
@@ -304,6 +308,8 @@ function renderInternal(state: RenderState, node: VNode, component: Component) {
 
   node.nodes = renderedNodes;
   node.component = component;
+  node.component.changed = false;
+  node.cc++;
 }
 
 renderUI.fragment = () => null as unknown as Component[];

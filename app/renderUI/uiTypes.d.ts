@@ -16,6 +16,7 @@ export type Component<P extends Props = Props, T extends ComponentType = Compone
   props?: P;
   content?: Component[];
   key?: any;
+  changed?: boolean;
 };
 export type RefObject<T = any> = { current?: T };
 export type RefFunction<T = any> = ((current: T) => void)

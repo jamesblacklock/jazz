@@ -266,10 +266,6 @@ function ChooseDeck({ deckIndex, chooseDeck }: { deckIndex: number, chooseDeck: 
     removeDeck(i);
     setStoredDecks(loadStoredDecks());
   }
-  state.useEffect("effect", () => {
-    console.log("in");
-    return () => console.log("out");
-  }, [])
   if (!isNaN(deckIndex) && deckIndex >= 0) {
     if (deckIndex < DECKS.length) {
       chooseDeck(DECKS[deckIndex]);
@@ -279,20 +275,33 @@ function ChooseDeck({ deckIndex, chooseDeck }: { deckIndex: number, chooseDeck: 
       return;
     }
   }
+  const chooseDeckClicked = (e: Event, deck: Deck) => {
+    e.preventDefault();
+    chooseDeck(deck);
+  };
+  const aStyle = {color: "#5959af"};
+  const buttonStyle = {
+    color: "red",
+    background: "transparent",
+    border: "none",
+    cursor: "pointer",
+    fontSize: "20px",
+  };
   return (
-    <>
+    <table>
       {DECKS.map((deck, i) => (
-        <div key={i}>
-          <button events={{click: () => chooseDeck(deck)}}>{deck.name}</button>
-        </div>
+        <tr key={i}>
+          <td><button style={{ ...buttonStyle, visibility: "hidden" }}>&times;</button></td>
+          <td><a href="" style={aStyle} events={{click: e => chooseDeckClicked(e, deck)}}>{deck.name}</a></td>
+        </tr>
       ))}
       {storedDecks.map((deck, i) => (
-        <div key={i}>
-          <button events={{click: () => removeDeckClicked(i)}}>&times;</button>
-          <button events={{click: () => chooseDeck(deck)}}>{deck.name}</button>
-        </div>
+        <tr key={i}>
+          <td><button style={buttonStyle} events={{click: () => removeDeckClicked(i)}}>&times;</button></td>
+          <td><a href="" style={aStyle} events={{click: e => chooseDeckClicked(e, deck)}}>{deck.name}</a></td>
+        </tr>
       ))}
-    </>
+    </table>
   );
 }
 
