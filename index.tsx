@@ -281,6 +281,11 @@ function ChooseDeck({ deckIndex, chooseDeck }: { deckIndex: number, chooseDeck: 
   }
   return (
     <>
+      <ul>
+        <li><a href="https://google.com" target="_blank"><p>hello</p></a></li>
+        <li><a href="https://google.com" target="_blank"><p>hello</p></a></li>
+        <li><a href="https://google.com" target="_blank"><p>hello</p></a></li>
+      </ul>
       {DECKS.map((deck, i) => (
         <div key={i}>
           <button events={{click: () => chooseDeck(deck)}}>{deck.name}</button>

@@ -1,4 +1,4 @@
-import renderUI, { RefObject, State } from "./renderUI";
+import renderUI, { State } from "./renderUI";
 import { Card } from "../index";
 
 type SaveAnswersProps = {
@@ -9,22 +9,19 @@ type SaveAnswersProps = {
 }
 
 function SaveAnswers({ name, cards, saveDeck, close }: SaveAnswersProps, state: State) {
-  const [ref] = state.use<RefObject>("ref", {});
-  state.useEffect("refChange", () => {
-    if (ref.current) {
-      const d = new Date();
-      const Y = d.getFullYear();
-      const M = String(d.getMonth() + 1).padStart(2, '0');
-      const D = String(d.getDate()).padStart(2, '0');
-      const h = d.getHours() % 12;
-      const H = String(h === 0 ? 12 : h).padStart(2, '0');
-      const m = String(d.getMinutes()).padStart(2, '0');
-      const P = d.getHours() > 12 ? 'PM' : 'AM';
-      ref.current.value = `${name} – Incorrect (${Y}-${M}-${D} ${H}:${m} ${P})`;
-    }
-  }, [ref.current]);
+  const [inputValue, setInputValue] = state.use("inputValue", () => {
+    const d = new Date();
+    const Y = d.getFullYear();
+    const M = String(d.getMonth() + 1).padStart(2, '0');
+    const D = String(d.getDate()).padStart(2, '0');
+    const h = d.getHours() % 12;
+    const H = String(h === 0 ? 12 : h).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    const P = d.getHours() > 12 ? 'PM' : 'AM';
+    return `${name} – Incorrect (${Y}-${M}-${D} ${H}:${m} ${P})`;
+  });
   const save = () => {
-    saveDeck(ref.current.value, cards);
+    saveDeck(inputValue, cards);
     close();
   }
   return <div
@@ -47,7 +44,8 @@ function SaveAnswers({ name, cards, saveDeck, close }: SaveAnswersProps, state: 
       }}
     >
       <h3>Save Missed Answers</h3>
-      <div><input ref={ref} style={{width: "300px"}} /></div>
+      <div><input style={{width: "300px"}} value={inputValue} events={{ input: e => {setInputValue(e.target.value); console.log(e.target.value)} }} /></div>
+      {inputValue}
       <div
         style={{
           display: "flex",

@@ -8,6 +8,7 @@
     "jsxFragmentFactory": "renderUI.fragment",
     "outDir": "dist",
     "target": "esnext",
-    "module": "umd"
+    "module": "umd",
+    "moduleResolution": "node"
   }
 }

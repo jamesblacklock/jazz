@@ -1,13 +1,32 @@
-declare global {
-  namespace JSX {
-    interface IntrinsicAttributes {
-      key?: any;
-    }
-    interface IntrinsicElements {
-      [key: string]: IntrinsicAttributes & HtmlComponentProps<any>;
-    }
-  }
-}
+export type * from "./htmlTypes";
+export type * from "./uiTypes";
+import type {
+  EventsMap,
+  HtmlAProps,
+  HtmlContentComponentProps,
+  HtmlInputProps,
+  StyleMap,
+} from "./htmlTypes";
+import type {
+  DebugInfo,
+  Props,
+  UIElement,
+  UINode,
+  Component,
+  ComponentFunction,
+  ComponentType,
+  RenderOptions,
+} from "./uiTypes";
+
+type VNode = {
+  r?: Symbol;
+  cc: number;
+  component: Component;
+  nodes: VNode[];
+  domNode?: Text|HTMLElement;
+  domParent: HTMLElement;
+  state?: State;
+};
 
 type SetterOptions = { dirty?: boolean, quiet?: boolean };
 type Setter<T> = (value: T, options?: SetterOptions) => void
@@ -107,16 +126,6 @@ export class State {
   }
 }
 
-export type DebugInfo = { renderCount: number, debug?: boolean };
-export type Props = Record<keyof any, any>;
-export type UIElement<T extends Props = Props> = {
-  type: ComponentFunction<T> | string;
-  props?: T;
-  content?: UINode;
-  key?: any;
-};
-export type UINode = UINode[] | UIElement | UIElement[] | string | number | false | null | undefined;
-
 function isElement(a: any): a is UIElement {
   return "type" in a && (a.type instanceof Function || typeof a.type === "string")
 }
@@ -142,34 +151,15 @@ function uiNodeToComponentArray(uiNode: UINode): Component[] {
   return [];
 }
 
-export type ComponentFunction<T extends Props = Props> = (props: T, state: State, debugInfo: DebugInfo) => UINode;
-
-export type Component<T extends Props = Props> = {
-  type: ComponentFunction<T> | string;
-  props?: T;
-  content?: Component[];
-  key?: any;
-};
-
-type VNode = {
-  r?: Symbol;
-  cc: number;
-  component: Component;
-  nodes: VNode[];
-  domNode?: Text|HTMLElement;
-  domParent: HTMLElement;
-  state?: State;
-};
-
 const DOM_ROOTS = new Map<Node, VNode>;
 
-function propsNotEqual(l: Props | undefined, r: Props | undefined, depth: number) {
+function propsNotEqual(l: Props | undefined, r: Props | undefined, depth: number = 0) {
   if (l === r) {
     return false;
   }
   const propNames = Array.from(new Set([...Reflect.ownKeys(l ?? {}), ...Reflect.ownKeys(r ?? {})]));
   let i = 0;
-  const limit = 20;
+  const limit = 30;
   for (const k of propNames) {
     if (i++ >= limit) {
       return true;
@@ -276,6 +266,7 @@ function renderInternal(state: RenderState, node: VNode, component: Component) {
       node.domNode = document.createTextNode(textContent);
     }
     if (textContent !== node.domNode.textContent) {
+      console.log(":", textContent);
       node.domNode.textContent = textContent;
     }
   } else {
@@ -289,7 +280,7 @@ function renderInternal(state: RenderState, node: VNode, component: Component) {
     if (node.state!.dirty || nodeChanged(node, component)) {
       node.state!.dirty = false;
       let componentFactory: ComponentFunction = typeof component.type === "string"
-        ? htmlComponent.bind(null, node.domNode as HTMLElement) as ComponentFunction
+        ? (HTML_COMPONENT[component.type] ?? htmlComponent).bind(null, node.domNode as HTMLElement) as ComponentFunction
         : component.type;
       const renderedContent = componentFactory(
         {content: component.content, ...component.props},
@@ -318,7 +309,7 @@ function renderInternal(state: RenderState, node: VNode, component: Component) {
 
 renderUI.fragment = () => null as unknown as Component[];
 renderUI.createElement = function<P extends {}>(
-  type: string | ComponentFunction,
+  type: ComponentType,
   props: P & { key?: any } | null, 
   ...content: UINode[]
 ): UINode {
@@ -328,10 +319,6 @@ renderUI.createElement = function<P extends {}>(
   }
   return { type, key, props: restProps, content };
 }
-
-export type RenderOptions = {
-  debug?: boolean;
-};
 
 export default function renderUI(domTarget: HTMLElement, component: Component, options: RenderOptions = {}) {
   let node = DOM_ROOTS.get(domTarget);
@@ -344,28 +331,13 @@ export default function renderUI(domTarget: HTMLElement, component: Component, o
   updateHtml(node);
 }
 
-export type RefObject<T = any> = { current?: T };
-export type RefFunction<T = any> = ((current: T) => void)
-export type Ref<T = any> = RefObject<T> | RefFunction<T>;
-type EventsMap = Partial<Record<keyof HTMLElementEventMap, EventListenerOrEventListenerObject>>;
-type StyleMap = Partial<Record<keyof CSSStyleDeclaration, string | number>>;
-type HtmlComponentProps<T extends keyof HTMLElementTagNameMap> = {
-  class?: string;
-  className?: string;
-  events?: EventsMap;
-  style?: StyleMap;
-  id?: string;
-  ref?: Ref<HTMLElementTagNameMap[T]>;
-  content?: UINode;
+type HtmlComponentFunction = {
+  (e: HTMLElement, props: HtmlContentComponentProps<any>, state: State, debugInfo: DebugInfo): UINode;
 };
-function htmlComponent<T extends keyof HTMLElementTagNameMap>(
-  e: HTMLElementTagNameMap[T],
-  props: HtmlComponentProps<T>,
-  state: State,
-  debugInfo: DebugInfo,
-) {
+
+const htmlComponent: HtmlComponentFunction = function htmlComponent(e, props, state, debugInfo) {
   const { events = {}, style, id, ref, className } = props;
-  const [attachedEvents] = state.use<EventsMap>("events", {});
+  const [attachedEvents] = state.use<EventsMap<any>>("events", {});
   const [savedStyle, setSavedStyle] = state.use<StyleMap | undefined>("style", undefined);
   if (id) {
     e.id = id;
@@ -377,20 +349,20 @@ function htmlComponent<T extends keyof HTMLElementTagNameMap>(
   } else {
     e.removeAttribute("class");
   }
-  const eventNames = Array.from(new Set([...Object.keys(events), ...Object.keys(attachedEvents)])) as (keyof EventsMap)[];
+  const eventNames = Array.from(new Set([...Object.keys(events), ...Object.keys(attachedEvents)])) as (keyof EventsMap<any>)[];
   for (const event of eventNames) {
     if(events[event] !== attachedEvents[event]) {
       if (attachedEvents[event]) {
-        e.removeEventListener(event, attachedEvents[event]);
+        e.removeEventListener(event, attachedEvents[event] as any as EventListenerOrEventListenerObject);
         delete attachedEvents[event];
       }
       if(events[event]) {
-        e.addEventListener(event, events[event]);
+        e.addEventListener(event, events[event] as any as EventListenerOrEventListenerObject);
         attachedEvents[event] = events[event];
       }
     }
   }
-  if (propsNotEqual(style, savedStyle, 0)) {
+  if (propsNotEqual(style, savedStyle)) {
     setSavedStyle(style, { quiet: true });
     e.removeAttribute("style");
     for (const prop in style) {
@@ -413,3 +385,29 @@ function htmlComponent<T extends keyof HTMLElementTagNameMap>(
 
   return props.content;
 }
+
+const HTML_COMPONENT: { [K in keyof HTMLElementTagNameMap]?: HtmlComponentFunction } = {
+  a(e, props, state, debugInfo) {
+    const { href, target } = props as HtmlAProps;
+    const a = e as HTMLAnchorElement;
+    if (href !== undefined) {
+      a.href = href;
+    } else {
+      a.removeAttribute("href");
+    }
+    if (target !== undefined) {
+      a.target = target;
+    } else {
+      a.removeAttribute("target");
+    }
+    return htmlComponent(e, props, state, debugInfo);
+  },
+  input(e, props, state, debugInfo) {
+    const { value } = props as HtmlInputProps;
+    const input = e as HTMLInputElement;
+    if (value !== undefined) {
+      input.value = value;
+    }
+    return htmlComponent(e, props, state, debugInfo);
+  },
+};
