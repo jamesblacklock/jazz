@@ -4,8 +4,8 @@
     "noImplicitAny": true,
     "strict": true,
     "jsx": "react",
-    "jsxFactory": "renderUI.createElement",
-    "jsxFragmentFactory": "renderUI.fragment",
+    "jsxFactory": "jazz.createElement",
+    "jsxFragmentFactory": "jazz.fragment",
     "outDir": "dist",
     "target": "esnext",
     "module": "umd"

@@ -1,12 +1,12 @@
-export type * from "./renderUI/htmlTypes";
-export type * from "./renderUI/uiTypes";
+export type * from "./jazz/htmlTypes";
+export type * from "./jazz/uiTypes";
 import type {
   EventsMap,
   HtmlAProps,
   HtmlContentComponentProps,
   HtmlInputProps,
   StyleMap,
-} from "./renderUI/htmlTypes";
+} from "./jazz/htmlTypes";
 import type {
   DebugInfo,
   Props,
@@ -16,11 +16,12 @@ import type {
   ComponentFunction,
   ComponentType,
   RenderOptions,
-} from "./renderUI/uiTypes";
+  RefObject,
+} from "./jazz/uiTypes";
 
 type VNode = {
   r?: Symbol;
-  cc: number;
+  rc: number;
   component: Component;
   nodes: VNode[];
   domNode?: Text|HTMLElement;
@@ -37,9 +38,9 @@ export class State {
   dirty: boolean = false;
   private state: Record<keyof any, any> = {};
   private effectCleanup: Record<keyof any, () => void> = {};
-  private deps: Record<keyof any, any[]|undefined> = {};
+  private deps: Record<keyof any, any[]|null> = {};
   private nextState: Record<keyof any, any> = {};
-  private quiet: Set<string> = new Set;
+  private quiet: Set<string|number> = new Set;
   private frame: number = 0;
   private renderOptions: RenderOptions;
   private node?: VNode | null;
@@ -48,13 +49,19 @@ export class State {
     this.node = node;
     this.renderOptions = renderOptions ?? {};
   }
-  use<T>(name: string, value: T | (() => T), deps?: any[]): [T, Setter<T>] {
-    return this.useInternal(name, value, deps, true, false);
+  use<T>(name: string|number, value: T | (() => T)): [T, Setter<T>] {
+    return this.useInternal(name, value, null, true, false) as [T, Setter<T>];
   }
-  useCallback<T>(name: string, callback: (() => T), deps: any[]): T {
+  useRef<T>(name: string|number, value: T): RefObject<T> {
+    return this.useInternal(name, { current: value }, null, false, false)[0];
+  }
+  useMemo<T>(name: string|number, value: (() => T), deps: any[]): T {
+    return this.useInternal(name, value, deps, true, false)[0];
+  }
+  useCallback<T>(name: string|number, callback: (() => T), deps: any[]): T {
     return this.useInternal(name, callback, deps, false, false)[0];
   }
-  useEffect(name: string, effect: (() => (() => void) | void), deps: any[]): void {
+  useEffect(name: string|number, effect: (() => (() => void) | void), deps: any[]): void {
     this.useInternal(name, effect, deps, true, true);
   }
   cleanup() {
@@ -62,7 +69,7 @@ export class State {
       this.effectCleanup[effect]();
     }
   }
-  private useInternal<T>(name: string, value: T | (() => T), deps: any[] | undefined, call: boolean, effect: boolean): [T, Setter<T>] {
+  private useInternal<T>(name: string|number, value: T | (() => T), deps: any[] | null, call: boolean, effect: boolean): [T, Setter<T> | null] {
     const depsChanged = this.depsChanged(name, deps);
     if (!(name in this.state) || depsChanged) {
       if (effect) {
@@ -80,9 +87,9 @@ export class State {
     if (depsChanged) {
       this.set(name, value, { dirty: true });
     }
-    return [this.state[name], this.set.bind(this, name)];
+    return [this.state[name], deps ? null : this.set.bind(this, name)];
   }
-  private set(name: string, value: any, options?: SetterOptions) {
+  private set(name: string|number, value: any, options?: SetterOptions) {
     const nans = Number.isNaN(value) && Number.isNaN(this.state[name]);
     if (!nans && value !== this.state[name] || options?.dirty) {
       if (options?.quiet) {
@@ -96,7 +103,7 @@ export class State {
       delete this.nextState[name];
     }
   }
-  private depsChanged(name: string, deps?: any[]) {
+  private depsChanged(name: string|number, deps: any[] | null) {
     if (deps?.length !== this.deps[name]?.length) {
       return true;
     }
@@ -119,11 +126,30 @@ export class State {
       this.quiet = new Set;
       if (!quiet) {
         this.dirty = true;
-        renderInternal({r: Symbol(), options: this.renderOptions}, this.node!, this.component!);
+        render({r: Symbol(), options: this.renderOptions}, this.node!, this.component!);
         updateHtml(this.node!);
       }
     });
   }
+}
+
+let currentComponentState: State | undefined;
+let currentComponentStateIndex = 0;
+
+export function useState<T>(value: T | (() => T)): [T, Setter<T>] {
+  return currentComponentState!.use(currentComponentStateIndex++, value);
+}
+export function useRef<T>(value: T): RefObject<T> {
+  return currentComponentState!.useRef(currentComponentStateIndex++, value);
+}
+export function useMemo<T>(value: (() => T), deps: any[]): T {
+  return currentComponentState!.useMemo(currentComponentStateIndex++, value, deps);
+}
+export function useCallback<T>(callback: (() => T), deps: any[]): T {
+  return currentComponentState!.useCallback(currentComponentStateIndex++, callback, deps);
+}
+export function useEffect(effect: (() => (() => void) | void), deps: any[]): void {
+  return currentComponentState!.useEffect(currentComponentStateIndex++, effect, deps);
 }
 
 function isElement(a: any): a is UIElement {
@@ -205,7 +231,7 @@ function contentNotEqual(l?: Component, r?: Component) {
 }
 
 function nodeChanged(node: VNode, component: Component) {
-  return node.cc === 0 || node.state?.dirty || contentNotEqual(node.component, component);
+  return node.rc === 0 || node.state?.dirty || contentNotEqual(node.component, component);
 }
 
 function getNode(parentNode: VNode, component: Component, renderedNodes: VNode[]): VNode {
@@ -217,7 +243,7 @@ function getNode(parentNode: VNode, component: Component, renderedNodes: VNode[]
   } else {
     node = {
       r: parentNode.r,
-      cc: 0,
+      rc: 0,
       component: { type: component.type, key: component.key },
       nodes: [],
       domParent: (parentNode.domNode ?? parentNode.domParent) as HTMLElement,
@@ -261,7 +287,7 @@ type RenderState = {
   options: RenderOptions;
 }
 
-function renderInternal(state: RenderState, node: VNode, component: Component) {
+function render(state: RenderState, node: VNode, component: Component) {
   node.r = state.r;
   const renderedNodes: VNode[] = [];
   if (component.type === "TEXT") {
@@ -285,16 +311,18 @@ function renderInternal(state: RenderState, node: VNode, component: Component) {
       let componentFactory: ComponentFunction = typeof component.type === "string"
         ? (HTML_COMPONENT[component.type] ?? htmlComponent).bind(null, node.domNode as HTMLElement) as ComponentFunction
         : component.type;
+      currentComponentState = node.state;
+      currentComponentStateIndex = 0;
       const renderedContent = componentFactory(
         {content: component.content, ...component.props},
         node.state!,
-        { debug: state.options?.debug, renderCount: node.cc }
+        { debug: state.options?.debug, renderCount: node.rc }
       );
       component.content = uiNodeToComponentArray(renderedContent);
       for (const childComponent of component.content) {
         const childNode = getNode(node, childComponent, renderedNodes);
         if (nodeChanged(childNode, childComponent)) {
-          renderInternal(state, childNode, childComponent);
+          render(state, childNode, childComponent);
         }
       }
     }
@@ -309,32 +337,43 @@ function renderInternal(state: RenderState, node: VNode, component: Component) {
   node.nodes = renderedNodes;
   node.component = component;
   node.component.changed = false;
-  node.cc++;
+  node.rc++;
 }
 
-renderUI.fragment = () => null as unknown as Component[];
-renderUI.createElement = function<P extends {}>(
+export const fragment = () => null as unknown as Component[];
+export const createElement = function<P extends {}>(
   type: ComponentType,
   props: P & { key?: any } | null, 
   ...content: UINode[]
 ): UINode {
   const { key, ...restProps } = props ?? {};
-  if (type === renderUI.fragment) {
+  if (type === fragment) {
     return content;
   }
   return { type, key, props: restProps, content };
 }
 
-export default function renderUI(domTarget: HTMLElement, component: Component, options: RenderOptions = {}) {
+export function mountComponent(domTarget: HTMLElement, component: Component, options: RenderOptions = {}) {
   let node = DOM_ROOTS.get(domTarget);
   if (!node) {
-    node = { cc: 0, component: { type: component.type, key: component.key }, nodes: [], domParent: domTarget };
+    node = { rc: 0, component: { type: component.type, key: component.key }, nodes: [], domParent: domTarget };
     DOM_ROOTS.set(domTarget, node);
   }
   node.component = { type: component.type, key: component.key };
-  renderInternal({r: Symbol(), options}, node, component);
+  render({r: Symbol(), options}, node, component);
   updateHtml(node);
 }
+
+export default {
+  fragment,
+  createElement,
+  mountComponent,
+  useState,
+  useRef,
+  useMemo,
+  useCallback,
+  useEffect,
+};
 
 type HtmlComponentFunction = {
   (e: HTMLElement, props: HtmlContentComponentProps<any>, state: State, debugInfo: DebugInfo): UINode;

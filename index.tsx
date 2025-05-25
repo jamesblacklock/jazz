@@ -1,4 +1,4 @@
-import renderUI, { State } from "./app/renderUI";
+import jazz, { useState } from "./app/jazz";
 import { FlashCards } from "./app/app";
 
 export type Card = { front: string, back: string };
@@ -260,8 +260,8 @@ function removeDeck(i: number) {
   localStorage.setItem("savedDecks", JSON.stringify(storedDecks));
 }
 
-function ChooseDeck({ deckIndex, chooseDeck }: { deckIndex: number, chooseDeck: (deck: Deck) => void }, state: State) {
-  const [storedDecks, setStoredDecks] = state.use<Deck[]>("decks", loadStoredDecks);
+function ChooseDeck({ deckIndex, chooseDeck }: { deckIndex: number, chooseDeck: (deck: Deck) => void }) {
+  const [storedDecks, setStoredDecks] = useState<Deck[]>(loadStoredDecks);
   const removeDeckClicked = (i: number) => {
     removeDeck(i);
     setStoredDecks(loadStoredDecks());
@@ -305,10 +305,10 @@ function ChooseDeck({ deckIndex, chooseDeck }: { deckIndex: number, chooseDeck: 
   );
 }
 
-function App(props: any, state: State) {
-  const [deckIndex, setDeckIndex] = state.use("deckIndex", () => parseInt(new URLSearchParams(location.search).get('deck') ?? ""));
+function App() {
+  const [deckIndex, setDeckIndex] = useState(() => parseInt(new URLSearchParams(location.search).get('deck') ?? ""));
   setDeckIndex(NaN);
-  const [deck, setDeck] = state.use<Deck | null>("deck", null);
+  const [deck, setDeck] = useState<Deck | null>(null);
   if (deck) {
     return (
       <FlashCards
@@ -322,4 +322,4 @@ function App(props: any, state: State) {
   return <ChooseDeck deckIndex={deckIndex} chooseDeck={deck => setDeck(deck)}/>
 }
 
-renderUI(document.body, <App />);
+jazz.mountComponent(document.body, <App />);

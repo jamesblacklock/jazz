@@ -1,4 +1,4 @@
-import renderUI, { State } from "./renderUI";
+import jazz, { useState } from "./jazz";
 import { Card } from "../index";
 
 type SaveAnswersProps = {
@@ -8,8 +8,8 @@ type SaveAnswersProps = {
   close: () => void;
 }
 
-function SaveAnswers({ name, cards, saveDeck, close }: SaveAnswersProps, state: State) {
-  const [inputValue, setInputValue] = state.use("inputValue", () => {
+function SaveAnswers({ name, cards, saveDeck, close }: SaveAnswersProps) {
+  const [inputValue, setInputValue] = useState(() => {
     const d = new Date();
     const Y = d.getFullYear();
     const M = String(d.getMonth() + 1).padStart(2, '0');
@@ -73,12 +73,12 @@ type FlashCardsProps = {
   saveDeck: (name: string, cards: Card[]) => void;
 }
 
-export function FlashCards({ cards: cardsProp, name, chooseDeck, saveDeck }: FlashCardsProps, state: State) {
-  const [nextRoundCards, setNextRoundCards] = state.use<Card[]>("nextRoundCards", []);
-  const [cards, setCards] = state.use("cards", [...cardsProp]);
-  const [phase, setPhase] = state.use<"front"|"back"|"done">("phase", "front");
-  const [index, setIndex] = state.use("index", 0);
-  const [showSaveModal, setShowSaveModal] = state.use("showSaveModal", false);
+export function FlashCards({ cards: cardsProp, name, chooseDeck, saveDeck }: FlashCardsProps) {
+  const [nextRoundCards, setNextRoundCards] = useState<Card[]>([]);
+  const [cards, setCards] = useState([...cardsProp]);
+  const [phase, setPhase] = useState<"front"|"back"|"done">("front");
+  const [index, setIndex] = useState(0);
+  const [showSaveModal, setShowSaveModal] = useState(false);
 
   const reset = (startOver?: boolean) => () => {
     const nextCards = (startOver || nextRoundCards.length < 1) ? [...cardsProp] : nextRoundCards;
