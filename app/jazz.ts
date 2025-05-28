@@ -40,17 +40,44 @@ export interface State {
   useEffect(name: string|number, effect: (() => (() => void) | void), deps: any[]): void;
 }
 
+let renderQueueTimer: number | null = null;
+let renderQueue: VNode[] = [];
+
+function requestRender(n: VNode, options: RenderOptions) {
+  renderQueue.push(n);
+  if (renderQueueTimer === null) {
+    renderQueueTimer = requestAnimationFrame(() => {
+      for (const node of renderQueue) {
+        if (node.state!.commit()) {
+          let renderState: RenderState = {r: Symbol(), options, changedDuringRender: new Set};
+          render(renderState, node, node.component);
+          while (renderState.changedDuringRender.size > 0) {
+            const reRender = renderState.changedDuringRender;
+            renderState = {r: Symbol(), options, changedDuringRender: new Set};
+            for (const node of reRender) {
+              node.state!.commit();
+              render(renderState, node, node.component);
+              renderState = {r: Symbol(), options, changedDuringRender: renderState.changedDuringRender};
+            }
+          }
+          updateHtml(node);
+        }
+      }
+      renderQueueTimer = null;
+      renderQueue = [];
+    });
+  }
+}
+
 class InternalState implements State {
-  component?: Component;
   target?: HTMLElement;
   dirty: boolean = false;
-  private forceRender = false;
+  forceRender = false;
   private state: Record<keyof any, any> = {};
   private effectCleanup: Record<keyof any, () => void> = {};
   private deps: Record<keyof any, any[]|null> = {};
   private nextState: Record<keyof any, any> = {};
   private quiet: Set<string|number> = new Set;
-  private frame: number = 0;
   private renderOptions: RenderOptions;
   private node?: VNode | null;
 
@@ -108,7 +135,7 @@ class InternalState implements State {
         this.quiet.delete(name);
       }
       this.nextState[name] = value;
-      this.render();
+      requestRender(this.node!, this.renderOptions);
     } else {
       delete this.nextState[name];
     }
@@ -125,27 +152,7 @@ class InternalState implements State {
     }
     return false;
   }
-  private render() {
-    cancelAnimationFrame(this.frame);
-    this.frame = requestAnimationFrame(() => {
-      if (this.commit()) {
-        let renderState: RenderState = {r: Symbol(), options: this.renderOptions, changedDuringRender: new Set};
-        render(renderState, this.node!, this.component!);
-        while (renderState.changedDuringRender.size > 0) {
-          const reRender = renderState.changedDuringRender;
-          renderState = {r: Symbol(), options: this.renderOptions, changedDuringRender: new Set};
-          for (const node of reRender) {
-            cancelAnimationFrame(node.state!.frame);
-            node.state!.commit();
-            render(renderState, node, node.component);
-            renderState = {r: Symbol(), options: this.renderOptions, changedDuringRender: renderState.changedDuringRender};
-          }
-        }
-        updateHtml(this.node!);
-      }
-    });
-  }
-  private commit() {
+  commit() {
     let quiet = !this.forceRender;
     for (const key in this.nextState) {
       this.state[key] = this.nextState[key];
@@ -330,7 +337,6 @@ function render(state: RenderState, node: VNode, component: Component) {
     }
     if (!node.state) {
       node.state = new InternalState(node, state.options);
-      node.state!.component = component;
     }
     if (nodeChanged(node, component)) {
       let componentFactory: ComponentFunction = typeof component.type === "string"
@@ -386,12 +392,21 @@ export function createElement<P extends {}>(
 export function mountComponent(domTarget: HTMLElement, component: Component, options: RenderOptions = {}) {
   let node = DOM_ROOTS.get(domTarget);
   if (!node) {
-    node = { rc: 0, component: { type: component.type, key: component.key }, nodes: [], domParent: domTarget };
+    node = {
+      rc: 0,
+      component: {
+        type: component.type, 
+        key: component.key
+      },
+      nodes: [],
+      domParent: domTarget,
+    };
+    node.state = new InternalState(node, options);
+    node.state.forceRender = true;
     DOM_ROOTS.set(domTarget, node);
   }
   node.component = { type: component.type, key: component.key };
-  render({r: Symbol(), options, changedDuringRender: new Set}, node, component);
-  updateHtml(node);
+  requestRender(node, options);
 }
 
 export default {
