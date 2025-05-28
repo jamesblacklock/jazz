@@ -34,7 +34,7 @@ type Setter<T> = (value: T, options?: SetterOptions) => void
 
 export interface State {
   use<T>(name: string|number, value: T | (() => T)): [T, Setter<T>];
-  useRef<T>(name: string|number, value: T): RefObject<T>;
+  useRef<T>(name: string|number, value?: T): RefObject<T>;
   useMemo<T>(name: string|number, value: (() => T), deps: any[]): T;
   useCallback<T>(name: string|number, callback: (() => T), deps: any[]): T;
   useEffect(name: string|number, effect: (() => (() => void) | void), deps: any[]): void;
@@ -88,7 +88,7 @@ class InternalState implements State {
   use<T>(name: string|number, value: T | (() => T)): [T, Setter<T>] {
     return this.useInternal(name, value, null, true, false) as [T, Setter<T>];
   }
-  useRef<T>(name: string|number, value: T): RefObject<T> {
+  useRef<T>(name: string|number, value?: T): RefObject<T> {
     return this.useInternal(name, { current: value }, null, false, false)[0];
   }
   useMemo<T>(name: string|number, value: (() => T), deps: any[]): T {
@@ -171,7 +171,7 @@ let currentComponentStateIndex = 0;
 export function useState<T>(value: T | (() => T)): [T, Setter<T>] {
   return currentComponentState!.use(currentComponentStateIndex++, value);
 }
-export function useRef<T>(value: T): RefObject<T> {
+export function useRef<T>(value?: T): RefObject<T> {
   return currentComponentState!.useRef(currentComponentStateIndex++, value);
 }
 export function useMemo<T>(value: (() => T), deps: any[]): T {

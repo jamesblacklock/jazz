@@ -1,14 +1,14 @@
 {
   "name": "flashcards",
   "version": "1.0.0",
-  "description": "",
+  "description": "Flashcards",
   "main": "index.js",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch"
   },
-  "author": "",
-  "license": "ISC",
+  "author": "James Blacklock <public@jamesblacklock.net>",
+  "license": "GPL-3.0-only",
   "devDependencies": {
     "typescript": "^5.8.3"
   },

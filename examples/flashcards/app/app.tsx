@@ -10,21 +10,19 @@ type SaveAnswersProps = {
 
 function SaveAnswers({ name, cards, saveDeck, close }: SaveAnswersProps) {
   const [inputValue, setInputValue] = useState(() => {
-    const d = new Date();
-    const Y = d.getFullYear();
-    const M = String(d.getMonth() + 1).padStart(2, '0');
-    const D = String(d.getDate()).padStart(2, '0');
-    const h = d.getHours() % 12;
-    const H = String(h === 0 ? 12 : h).padStart(2, '0');
-    const m = String(d.getMinutes()).padStart(2, '0');
-    const P = d.getHours() > 12 ? 'PM' : 'AM';
-    return `${name} – Incorrect (${Y}-${M}-${D} ${H}:${m} ${P})`;
+    const d = new Date;
+    const month = ["January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "November", "December"][d.getMonth()];
+    return `${name} – Missed (${month} ${d.getDate()})`;
   });
+
   const save = () => {
     saveDeck(inputValue, cards);
     close();
   }
-  return <div
+
+  return (
+    <div
       style={{
         position: "fixed",
         left: "0",
@@ -36,34 +34,29 @@ function SaveAnswers({ name, cards, saveDeck, close }: SaveAnswersProps) {
         alignItems: "center",
       }}
     >
-    <div
-      style={{
-        margin: "auto",
-        padding: "24px",
-        background: "white",
-      }}
-    >
-      <h3>Save Missed Answers</h3>
-      <div>
-        <input
-          style={{width: "300px"}}
-          value={inputValue}
-          events={{ change: e => setInputValue(e.target.value) }}
-        />
-      </div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "flex-end",
-          gap: "10px",
-          paddingTop: "24px",
-        }}
-      >
-        <button events={{ click: close }}>Cancel</button>
-        <button events={{ click: save }}>Save</button>
+      <div style={{ margin: "auto", padding: "24px", background: "white" }}>
+        <h3>Save Missed Answers</h3>
+        <div>
+          <input
+            style={{width: "300px"}}
+            value={inputValue}
+            events={{ change: e => setInputValue(e.target.value) }}
+          />
+        </div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            gap: "10px",
+            paddingTop: "24px",
+          }}
+        >
+          <button events={{ click: close }}>Cancel</button>
+          <button events={{ click: save }}>Save</button>
+        </div>
       </div>
     </div>
-  </div>;
+  );
 }
 
 type FlashCardsProps = {
@@ -90,16 +83,16 @@ export function FlashCards({ cards: cardsProp, name, chooseDeck, saveDeck }: Fla
 
   useEffect(reset(true), []);
 
-  const save = () => {
-    setShowSaveModal(true);
-  };
   const back = () => {
     if (phase === "back") {
       setPhase("front");
       return;
     }
     setIndex(index - 1);
-    if (index > 0 && nextRoundCards[nextRoundCards.length - 1].front === cards[index - 1].front) {
+    if (index > 0
+      && nextRoundCards.length > 0
+      && nextRoundCards[nextRoundCards.length - 1].front === cards[index - 1].front
+    ) {
       nextRoundCards.pop();
       setNextRoundCards(nextRoundCards, { dirty: true });
     }
@@ -124,15 +117,9 @@ export function FlashCards({ cards: cardsProp, name, chooseDeck, saveDeck }: Fla
   return (
     <>
       <button events={{click: chooseDeck}}>Choose Deck</button>
-      <button events={{click: save}}>Save Missed Answers</button>
+      <button events={{click: () => setShowSaveModal(true)}}>Save Missed Answers</button>
       <h2>{name}</h2>
-      <div>
-        {{
-          front: `${index + 1} / ${cards.length} cards`,
-          back: `${index + 1} / ${cards.length} cards`,
-          done: "Round over",
-        }[phase]}
-      </div>
+      <div>{phase === "done" ? "Round over" : `${index + 1} / ${cards.length} cards`}</div>
       <div
         style={{
           border: "1px solid #aaa",
@@ -144,11 +131,7 @@ export function FlashCards({ cards: cardsProp, name, chooseDeck, saveDeck }: Fla
           justifyContent: "center",
         }}
       >
-        {{
-          front: cards[index]?.front,
-          back: cards[index]?.back,
-          done: `You missed ${nextRoundCards.length}`,
-        }[phase]}
+        {phase === "done" ? `You missed ${nextRoundCards.length}` : cards[index]?.[phase]}
       </div>
       <div
         style={{
@@ -157,21 +140,17 @@ export function FlashCards({ cards: cardsProp, name, chooseDeck, saveDeck }: Fla
           gap: "4px",
         }}
       >
-        {{
-          front: <>
-            {index > 0 && <button events={{click: back}}>&lt;</button>}
-            <button events={{click: next()}}>Flip Card</button>
-          </>,
-          back: <>
-            <button events={{click: back}}>&lt;</button>
-            <button events={{click: next()}}>Correct</button>
-            <button events={{click: next(true)}}>Incorrect</button>
-          </>,
-          done: <>
-            <button events={{click: reset(true)}}>Start Over</button>
-            {nextRoundCards.length > 0 && <button events={{click: reset()}}>Keep Going</button>}
-          </>
-        }[phase]}
+        {phase === "front" ? <>
+          {index > 0 && <button events={{click: back}}>&lt;</button>}
+          <button events={{click: next()}}>Flip Card</button>
+        </> : phase === "back" ? <>
+          <button events={{click: back}}>&lt;</button>
+          <button events={{click: next()}}>Correct</button>
+          <button events={{click: next(true)}}>Incorrect</button>
+        </> : /* phase === "done" */ <>
+          <button events={{click: reset(true)}}>Start Over</button>
+          {nextRoundCards.length > 0 && <button events={{click: reset()}}>Keep Going</button>}
+        </>}
       </div>
       <div
         style={{
@@ -183,11 +162,21 @@ export function FlashCards({ cards: cardsProp, name, chooseDeck, saveDeck }: Fla
       >
         <table>
           {nextRoundCards.map((e, i) => (
-            <tr key={i}><td style={{padding: "0 12px"}}>{e.front}</td><td style={{padding: "0 12px"}}>{e.back}</td></tr>
+            <tr key={i}>
+              <td style={{padding: "0 12px"}}>{e.front}</td>
+              <td style={{padding: "0 12px"}}>{e.back}</td>
+            </tr>
           ))}
         </table>
       </div>
-      {showSaveModal && <SaveAnswers name={name} cards={cards} saveDeck={saveDeck} close={() => setShowSaveModal(false)} />}
+      {showSaveModal && (
+        <SaveAnswers
+          name={name}
+          cards={nextRoundCards}
+          saveDeck={saveDeck}
+          close={() => setShowSaveModal(false)}
+        />
+      )}
     </>
   );
 }

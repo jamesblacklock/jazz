@@ -1,8 +1,12 @@
 {
   "name": "@dragonpop/jazz",
-  "version": "0.1.7",
+  "version": "0.1.11",
   "main": "index.js",
   "types": "index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jamesblacklock/jazz.git"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -16,5 +20,5 @@
   "directories": {
     "lib": "lib"
   },
-  "description": ""
+  "description": "State-driven GUI framework"
 }
