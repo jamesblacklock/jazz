@@ -1,4 +1,4 @@
-import jazz, { useState } from "./app/jazz";
+import jazz, { useState } from "@dragonpop/jazz";
 import { FlashCards } from "./app/app";
 
 export type Card = { front: string, back: string };

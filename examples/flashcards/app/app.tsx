@@ -1,4 +1,4 @@
-import jazz, { useEffect, useState } from "./jazz";
+import jazz, { useEffect, useState } from "@dragonpop/jazz";
 import { Card } from "../index";
 
 type SaveAnswersProps = {

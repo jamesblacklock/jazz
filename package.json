@@ -1,16 +1,20 @@
 {
-  "name": "flashcards",
-  "version": "1.0.0",
-  "description": "",
+  "name": "@dragonpop/jazz",
+  "version": "0.1.7",
   "main": "index.js",
+  "types": "index.d.ts",
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "prepare": "npm run build && cp ./dist/* ./"
   },
-  "author": "",
-  "license": "ISC",
+  "author": "James Blacklock <public@jamesblacklock.net>",
+  "license": "LGPL-3.0-only",
   "devDependencies": {
-    "jsx-compiler": "^0.4.37",
     "typescript": "^5.8.3"
-  }
+  },
+  "directories": {
+    "lib": "lib"
+  },
+  "description": ""
 }

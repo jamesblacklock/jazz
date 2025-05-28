@@ -6,8 +6,9 @@ window.onload = async function () {
     if (importName.startsWith("./")) {
       const dir = moduleName.match("(.*/)?.*")[1] ?? "";
       return dir + importName.slice(2)
+    } else {
+      return "node_modules/" + importName + "/index";
     }
-    return importName;
   }
 
   window.define = function(imports, factory) {

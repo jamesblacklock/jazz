@@ -1,4 +1,4 @@
-import { UIElement, Ref, UINode, UITextNode } from "./uiTypes";
+import { Ref, UINode, UITextNode } from "./types";
 
 export type EventListenerWithTarget<E extends Event, T> = (e: Omit<E, "target"> & { target: T }) => void;
 export type EventsMap<T extends keyof HTMLElementTagNameMap> = Partial<{ [K in keyof HTMLElementEventMap]: EventListenerWithTarget<HTMLElementEventMap[K], HTMLElementTagNameMap[T]> }>;

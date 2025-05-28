@@ -1,12 +1,12 @@
-export type * from "./jazz/htmlTypes";
-export type * from "./jazz/uiTypes";
+export type * from "./htmlTypes";
+export type * from "./types";
 import type {
   EventsMap,
   HtmlAProps,
   HtmlContentComponentProps,
   HtmlInputProps,
   StyleMap,
-} from "./jazz/htmlTypes";
+} from "./htmlTypes";
 import type {
   DebugInfo,
   Props,
@@ -17,7 +17,7 @@ import type {
   ComponentType,
   RenderOptions,
   RefObject,
-} from "./jazz/uiTypes";
+} from "./types";
 
 type VNode = {
   r?: Symbol;

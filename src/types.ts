@@ -1,4 +1,4 @@
-import type { State } from "../jazz";
+import type { State } from "./index";
 
 export type DebugInfo = { renderCount: number, debug?: boolean };
 export type Props = Record<keyof any, any> | undefined | null;
