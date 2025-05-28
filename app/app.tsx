@@ -1,4 +1,4 @@
-import jazz, { useState } from "./jazz";
+import jazz, { useEffect, useState } from "./jazz";
 import { Card } from "../index";
 
 type SaveAnswersProps = {
@@ -75,7 +75,7 @@ type FlashCardsProps = {
 
 export function FlashCards({ cards: cardsProp, name, chooseDeck, saveDeck }: FlashCardsProps) {
   const [nextRoundCards, setNextRoundCards] = useState<Card[]>([]);
-  const [cards, setCards] = useState([...cardsProp]);
+  const [cards, setCards] = useState<Card[]>([]);
   const [phase, setPhase] = useState<"front"|"back"|"done">("front");
   const [index, setIndex] = useState(0);
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -87,6 +87,9 @@ export function FlashCards({ cards: cardsProp, name, chooseDeck, saveDeck }: Fla
     setPhase("front");
     setIndex(0);
   };
+
+  useEffect(reset(true), []);
+
   const save = () => {
     setShowSaveModal(true);
   };

@@ -26,16 +26,25 @@ type VNode = {
   nodes: VNode[];
   domNode?: Text|HTMLElement;
   domParent: HTMLElement;
-  state?: State;
+  state?: InternalState;
 };
 
 type SetterOptions = { dirty?: boolean, quiet?: boolean };
 type Setter<T> = (value: T, options?: SetterOptions) => void
 
-export class State {
+export interface State {
+  use<T>(name: string|number, value: T | (() => T)): [T, Setter<T>];
+  useRef<T>(name: string|number, value: T): RefObject<T>;
+  useMemo<T>(name: string|number, value: (() => T), deps: any[]): T;
+  useCallback<T>(name: string|number, callback: (() => T), deps: any[]): T;
+  useEffect(name: string|number, effect: (() => (() => void) | void), deps: any[]): void;
+}
+
+class InternalState implements State {
   component?: Component;
   target?: HTMLElement;
   dirty: boolean = false;
+  private forceRender = false;
   private state: Record<keyof any, any> = {};
   private effectCleanup: Record<keyof any, () => void> = {};
   private deps: Record<keyof any, any[]|null> = {};
@@ -92,6 +101,7 @@ export class State {
   private set(name: string|number, value: any, options?: SetterOptions) {
     const nans = Number.isNaN(value) && Number.isNaN(this.state[name]);
     if (!nans && value !== this.state[name] || options?.dirty) {
+      this.forceRender = this.forceRender || !!options?.dirty;
       if (options?.quiet) {
         this.quiet.add(name);
       } else {
@@ -102,6 +112,7 @@ export class State {
     } else {
       delete this.nextState[name];
     }
+    this.dirty = this.forceRender || Object.keys(this.nextState).length > this.quiet.size;
   }
   private depsChanged(name: string|number, deps: any[] | null) {
     if (deps?.length !== this.deps[name]?.length) {
@@ -117,19 +128,33 @@ export class State {
   private render() {
     cancelAnimationFrame(this.frame);
     this.frame = requestAnimationFrame(() => {
-      let quiet = true;
-      for (const key in this.nextState) {
-        this.state[key] = this.nextState[key];
-        quiet = quiet && this.quiet.has(key);
-      }
-      this.nextState = {};
-      this.quiet = new Set;
-      if (!quiet) {
-        this.dirty = true;
-        render({r: Symbol(), options: this.renderOptions}, this.node!, this.component!);
+      if (this.commit()) {
+        let renderState: RenderState = {r: Symbol(), options: this.renderOptions, changedDuringRender: new Set};
+        render(renderState, this.node!, this.component!);
+        while (renderState.changedDuringRender.size > 0) {
+          const reRender = renderState.changedDuringRender;
+          renderState = {r: Symbol(), options: this.renderOptions, changedDuringRender: new Set};
+          for (const node of reRender) {
+            cancelAnimationFrame(node.state!.frame);
+            node.state!.commit();
+            render(renderState, node, node.component);
+            renderState = {r: Symbol(), options: this.renderOptions, changedDuringRender: renderState.changedDuringRender};
+          }
+        }
         updateHtml(this.node!);
       }
     });
+  }
+  private commit() {
+    let quiet = !this.forceRender;
+    for (const key in this.nextState) {
+      this.state[key] = this.nextState[key];
+      quiet = quiet && this.quiet.has(key);
+    }
+    this.nextState = {};
+    this.quiet = new Set;
+    this.forceRender = false;
+    return !quiet;
   }
 }
 
@@ -285,6 +310,7 @@ function removeNode(node: VNode) {
 type RenderState = {
   r: Symbol;
   options: RenderOptions;
+  changedDuringRender: Set<VNode>;
 }
 
 function render(state: RenderState, node: VNode, component: Component) {
@@ -303,21 +329,24 @@ function render(state: RenderState, node: VNode, component: Component) {
       node.domNode = document.createElement(component.type);
     }
     if (!node.state) {
-      node.state = new State(node, state.options);
+      node.state = new InternalState(node, state.options);
       node.state!.component = component;
     }
     if (nodeChanged(node, component)) {
-      node.state!.dirty = false;
       let componentFactory: ComponentFunction = typeof component.type === "string"
         ? (HTML_COMPONENT[component.type] ?? htmlComponent).bind(null, node.domNode as HTMLElement) as ComponentFunction
         : component.type;
       currentComponentState = node.state;
       currentComponentStateIndex = 0;
+      node.state!.dirty = false;
       const renderedContent = componentFactory(
         {content: component.content, ...component.props},
         node.state!,
         { debug: state.options?.debug, renderCount: node.rc }
       );
+      if (node.state!.dirty) {
+        state.changedDuringRender.add(node);
+      }
       component.content = uiNodeToComponentArray(renderedContent);
       for (const childComponent of component.content) {
         const childNode = getNode(node, childComponent, renderedNodes);
@@ -340,14 +369,15 @@ function render(state: RenderState, node: VNode, component: Component) {
   node.rc++;
 }
 
-export const fragment = () => null as unknown as Component[];
-export const createElement = function<P extends {}>(
+class Fragment {}
+export const fragment = new Fragment;
+export function createElement<P extends {}>(
   type: ComponentType,
   props: P & { key?: any } | null, 
   ...content: UINode[]
 ): UINode {
   const { key, ...restProps } = props ?? {};
-  if (type === fragment) {
+  if (type instanceof Fragment) {
     return content;
   }
   return { type, key, props: restProps, content };
@@ -360,7 +390,7 @@ export function mountComponent(domTarget: HTMLElement, component: Component, opt
     DOM_ROOTS.set(domTarget, node);
   }
   node.component = { type: component.type, key: component.key };
-  render({r: Symbol(), options}, node, component);
+  render({r: Symbol(), options, changedDuringRender: new Set}, node, component);
   updateHtml(node);
 }
 

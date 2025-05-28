@@ -1,14 +1,14 @@
 import type { State } from "../jazz";
 
 export type DebugInfo = { renderCount: number, debug?: boolean };
-export type Props = Record<keyof any, any>;
+export type Props = Record<keyof any, any> | undefined | null;
 export type TextNodeProps = { textContent: string };
 export type ComponentType<P extends Props = Props> = ComponentFunction<P> | keyof HTMLElementTagNameMap | "TEXT";
 export type UIElement<P extends Props = Props, T extends ComponentType = ComponentType> = {
   type: T;
-  props?: P;
-  content?: UINode;
-  key?: any;
+  props: P;
+  content: UINode;
+  key: any;
 };
 export type UITextNode = UITextNode[] | UIElement<TextNodeProps, "TEXT"> | string | number | false | null | undefined;
 export type UINode = UINode[] | UIElement | UITextNode;
