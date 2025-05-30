@@ -4,7 +4,6 @@ import { FlashCards } from "./app/app";
 export type Card = { front: string, back: string };
 export type Deck = { name: string, cards: Card[], stored?: boolean };
 
-import LiquorDeck from "./decks/liquor";
 import SpanishAnimalsDeck from "./decks/spanish/animals";
 import SpanishBodyDeck from "./decks/spanish/body";
 import SpanishBasicsDeck from "./decks/spanish/basics";
@@ -15,14 +14,8 @@ import SpanishFoodDeck from "./decks/spanish/food";
 import SpanishHouseDeck from "./decks/spanish/house";
 import SpanishTransportationDeck from "./decks/spanish/transportation";
 
-const TestDeck = {
-  name: "test",
-  cards: [{ front: "a", back: "A" }, { front: "b", back: "B" }, { front: "c", back: "C" }]
-};
-
 const DECKS: Deck[] = [
-  // TestDeck,
-  LiquorDeck,
+  // { name: "test", cards: [{ front: "a", back: "A" }, { front: "b", back: "B" }, { front: "c", back: "C" }] },
   SpanishAnimalsDeck,
   SpanishBodyDeck,
   SpanishBasicsDeck,

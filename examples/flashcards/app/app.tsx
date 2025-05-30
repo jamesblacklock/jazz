@@ -1,4 +1,4 @@
-import jazz, { useEffect, useState } from "@dragonpop/jazz";
+import jazz, { createPortal, useEffect, useState } from "@dragonpop/jazz";
 import { Card } from "../index";
 
 type SaveAnswersProps = {
@@ -36,6 +36,7 @@ function SaveAnswers({ name, cards, saveDeck, close }: SaveAnswersProps) {
     >
       <div style={{ margin: "auto", padding: "24px", background: "white" }}>
         <h3>Save Missed Answers</h3>
+        {createPortal("test", document.body)}
         <div>
           <input
             style={{width: "300px"}}

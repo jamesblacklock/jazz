@@ -1,5 +1,5 @@
 export default {
-  name: "Liquor Call Brands",
+  name: "Liquor Brands",
   cards: [
     { front: "Absolut", back: "Vodka" },
     { front: "Absolut Citron", back: "Vodka" },

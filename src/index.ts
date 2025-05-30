@@ -24,6 +24,7 @@ type VNode = {
   rc: number;
   component: Component;
   nodes: VNode[];
+  portalChildren: VNode[];
   domNode?: Text|HTMLElement;
   domParent: HTMLElement;
   state?: InternalState;
@@ -196,7 +197,7 @@ function uiNodeToComponentArray(uiNode: UINode): Component[] {
     }
     return components;
   }
-  if (uiNode == false || uiNode === null || uiNode === undefined) {
+  if (uiNode === false || uiNode === null || uiNode === undefined) {
     return [];
   }
   if (typeof uiNode === "string" || typeof uiNode === "number") {
@@ -272,13 +273,17 @@ function getNode(parentNode: VNode, component: Component, renderedNodes: VNode[]
   );
   if (node) {
     node.r = parentNode.r;
+    if (component.domParent) {
+      node.domParent = component.domParent;
+    }
   } else {
     node = {
       r: parentNode.r,
       rc: 0,
       component: { type: component.type, key: component.key },
       nodes: [],
-      domParent: (parentNode.domNode ?? parentNode.domParent) as HTMLElement,
+      portalChildren: [],
+      domParent: (component.domParent ?? parentNode.domNode ?? parentNode.domParent) as HTMLElement,
     };
   }
   renderedNodes.push(node);
@@ -291,15 +296,27 @@ function* reversed<T>(arr: T[]): Generator<T> {
   }
 }
 
-function updateHtml(node: VNode, nextSibling?: Node | null): Node | null {
-  const contained = node.domParent.contains(node.domNode ?? null);
-  const siblingMatches = node.domNode?.nextSibling === nextSibling;
-  if (node.domNode && !(contained && siblingMatches)) {
-    node.domParent.insertBefore(node.domNode, nextSibling ?? null);
+function updateHtml(
+  node: VNode,
+  nextSibling: Node | null = null,
+  checkSiblings: boolean = false,
+): Node | null {
+  if (node.domNode) {
+    const contained = node.domParent.contains(node.domNode);
+    const siblingOk = !checkSiblings || node.domNode.nextSibling === nextSibling;
+    if (!contained || !siblingOk) {
+      node.domParent.insertBefore(node.domNode, checkSiblings ? nextSibling : null);
+    }
   }
-  let lastInserted: Node | null = null;
+  let childCheckSiblings = !!(node.domNode || checkSiblings);
+  let lastInserted: Node | null = node.domNode ? null : nextSibling;
   for (const childNode of reversed(node.nodes)) {
-    lastInserted = updateHtml(childNode, lastInserted) ?? lastInserted;
+    const isPortalChild = childNode.domParent !== (node.domNode ?? node.domParent);
+    const res = updateHtml(childNode, lastInserted, childCheckSiblings && !isPortalChild);
+    if (!isPortalChild) {
+      lastInserted = res ?? lastInserted;
+      childCheckSiblings = true;
+    }
   }
 
   return node.domNode ?? lastInserted;
@@ -307,6 +324,7 @@ function updateHtml(node: VNode, nextSibling?: Node | null): Node | null {
 
 function removeNode(node: VNode) {
   node.state?.cleanup();
+  node.portalChildren.forEach(removeNode);
   if (node.domNode) {
     node.domNode.remove();
     return;
@@ -322,7 +340,6 @@ type RenderState = {
 
 function render(state: RenderState, node: VNode, component: Component) {
   node.r = state.r;
-  const renderedNodes: VNode[] = [];
   if (component.type === "TEXT") {
     const textContent: string = (component.props?.textContent ?? "").toString();
     if (!node.domNode) {
@@ -354,25 +371,35 @@ function render(state: RenderState, node: VNode, component: Component) {
         state.changedDuringRender.add(node);
       }
       component.content = uiNodeToComponentArray(renderedContent);
+      const renderedNodes: VNode[] = [];
+      const portalChildren: VNode[] = [];
       for (const childComponent of component.content) {
         const childNode = getNode(node, childComponent, renderedNodes);
+        if (childComponent.domParent) {
+          portalChildren.push(childNode);
+        }
         if (nodeChanged(childNode, childComponent)) {
           render(state, childNode, childComponent);
         }
+        portalChildren.push(...childNode.portalChildren);
       }
+      for (const n of node.nodes) {
+        if (n.r !== node.r) {
+          removeNode(n);
+        }
+      }
+      node.nodes = renderedNodes;
+      node.portalChildren = portalChildren;
     }
   }
 
-  for (const n of node.nodes) {
-    if (n.r !== node.r) {
-      removeNode(n);
-    }
-  }
-
-  node.nodes = renderedNodes;
   node.component = component;
   node.component.changed = false;
   node.rc++;
+}
+
+export function createPortal(node: UINode, domParent: HTMLElement, key?: any): UINode {
+  return { type: () => node, key, domParent, content: null, props: null };
 }
 
 class Fragment {}
@@ -399,6 +426,7 @@ export function mountComponent(domTarget: HTMLElement, component: Component, opt
         key: component.key
       },
       nodes: [],
+      portalChildren: [],
       domParent: domTarget,
     };
     node.state = new InternalState(node, options);

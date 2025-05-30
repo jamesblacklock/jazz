@@ -5,9 +5,9 @@ window.onload = async function () {
   function canonicalModuleName(importName, moduleName) {
     if (importName.startsWith("./")) {
       const dir = moduleName.match("(.*/)?.*")[1] ?? "";
-      return dir + importName.slice(2)
+      return `${dir}${importName.slice(2)}`;
     } else {
-      return "node_modules/" + importName + "/index";
+      return `node_modules/${importName}/index`;
     }
   }
 
