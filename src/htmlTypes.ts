@@ -1,4 +1,4 @@
-import { Ref, UINode, UITextNode } from "./types";
+// import { /*Ref, UINode, UITextNode*/ } from "./types";
 
 export type EventListenerWithTarget<E extends Event, T> = (e: Omit<E, "target"> & { target: T }) => void;
 export type EventsMap<T extends keyof HTMLElementTagNameMap> = Partial<{ [K in keyof HTMLElementEventMap]: EventListenerWithTarget<HTMLElementEventMap[K], HTMLElementTagNameMap[T]> }>;
@@ -9,12 +9,12 @@ export interface HtmlComponentProps<T extends keyof HTMLElementTagNameMap> exten
   events?: EventsMap<T>;
   style?: StyleMap;
   id?: string;
-  ref?: Ref<HTMLElementTagNameMap[T]>;
+  // ref?: Ref<HTMLElementTagNameMap[T]>;
 }
 
 export interface HtmlContentComponentProps<
   T extends keyof HTMLElementTagNameMap,
-  C = UINode | UINode[],
+  C = any,//UINode | UINode[],
 > extends HtmlComponentProps<T> {
   content?: C;
 }
@@ -33,11 +33,12 @@ export type HtmlAProps = HtmlContentComponentProps<"a"> & {
 
 declare global {
   namespace JSX {
-    interface ElementChildrenAttribute {
-      content: {};
-    }
+    // interface ElementChildrenAttribute {
+    //   content: {};
+    // }
     interface IntrinsicAttributes {
       key?: any;
+      binding?: (props: any, state: any) => any;
     }
 
     interface IntrinsicElements {
@@ -57,10 +58,10 @@ declare global {
       wbr: HtmlComponentProps<"wbr">;
 
       // text elements
-      script: HtmlContentComponentProps<"script", UITextNode>;
-      style: HtmlContentComponentProps<"style", UITextNode>;
-      textarea: HtmlContentComponentProps<"textarea", UITextNode>;
-      title: HtmlContentComponentProps<"title", UITextNode>;
+      script: HtmlContentComponentProps<"script", any>;
+      style: HtmlContentComponentProps<"style", any>;
+      textarea: HtmlContentComponentProps<"textarea", any>;
+      title: HtmlContentComponentProps<"title", any>;
 
       // normal elements
       a: HtmlAProps;
