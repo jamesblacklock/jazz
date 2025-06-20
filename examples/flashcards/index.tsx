@@ -1,4 +1,4 @@
-import jazz, { Component, If, State, /*State, UINode, useState*/ } from "@dragonpop/jazz";
+import jazz, { Component, /*State */ } from "@dragonpop/jazz";
 // import { FlashCards } from "./app/app";
 
 // export type Card = { front: string, back: string };
@@ -112,44 +112,15 @@ import jazz, { Component, If, State, /*State, UINode, useState*/ } from "@dragon
 //   return <ChooseDeck deckIndex={deckIndex} chooseDeck={deck => setDeck(deck)}/>
 // }
 
-// function If({cond, then, $else}: { cond: boolean, then: UINode, $else: UINode }) {
-//   if (cond) {
-//     return then;
-//   } else {
-//     return $else;
-//   }
-// }
-
-// function Foreach<T>({items, map}: {items: T[], map: (item: T) => UINode }) {
-//   return items.map(map);
-// }
-
-// function App2(props: any, state: State) {
-//   const [n, setN] = state.use("n", 0);
-
-//   return <div>
-//     <button events={{click: () => setN(n+1)}}>click me</button>
-//     <If
-//       cond={n % 2 === 0}
-//       then={"yes"}
-//       $else={"no"}
-//     />
-//     <Foreach
-//       items={[1,2,3]}
-//       map={item => <li>{item}</li>}
-//     />
-//   </div>
-// }
-
 // jazz.mountComponent(document.body, <App />);
 
-class Abc extends Component<{}> {
+class Abc extends Component<{ s: string }> {
   constructor() {
-    super({}, {});
+    super({ s: "ABC" }, {});
   }
-  render() {
-    return <span>ABC</span>;
-  }
+  template = /*jsx*/`
+    <span>{props.s} @children {props.s}</span>
+  `;
 }
 
 type AppProps = {
@@ -162,24 +133,24 @@ class App extends Component<AppProps, AppState> {
   constructor() {
     super({ message: "" }, { thing: "" });
   }
-  render() {
-    return (
-      <div>
-        <Abc />
-        <input binding={(props: AppProps, state: State<AppState>) => ({events: { input: (e: any) => state.set({ thing: e.target.value }) } })}/>
-        <span binding={(props: AppProps, state: State<AppState>) => ({ style: { color: state.value.thing } })}>{(props: AppProps, state: State<AppState>) => state.value.thing}</span>
-        <div>{(props: AppProps) => props.message}</div>
-        <If binding={(props: AppProps) => ({ cond: props.message.length > 1 })}>
-          <App binding={(props: AppProps) => ({ message: props.message.slice(1)})} />
-        </If>
-        <If binding={(props: AppProps) => ({ cond: props.message === "123" })}>
-          <span>Good!</span>
-        </If>
-      </div>
-    );
-  }
+  imports = { Abc, App };
+  template = /*jsx*/`
+    <div>
+      <Abc s="123">{props.message}</Abc>
+      <input events={{ input: e => state.set({ thing: e.target.value }) }}/>
+      <span style={{ color: state.value.thing }}>{state.value.thing}</span>
+      <div>{props.message}</div>
+      @if {props.message.length > 1} {
+        <App message={props.message.slice(1)} />
+      }
+      @if {props.message === "123"} {
+        <span>Good!</span>
+      } @else {
+        <span style={{ fontWeight: "bold" }}>Bad!</span>
+      }
+    </div>
+  `;
 }
-// console.log(new App().render());
 
 (window as any).App = new App();
 jazz.mountComponent(document.body, (window as any).App);

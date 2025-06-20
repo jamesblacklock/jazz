@@ -7,7 +7,7 @@ window.onload = async function () {
       const dir = moduleName.match("(.*/)?.*")[1] ?? "";
       return `${dir}${importName.slice(2)}`;
     } else {
-      return `node_modules/${importName}/index`;
+      return `node_modules/${importName}`;
     }
   }
 
@@ -24,6 +24,9 @@ window.onload = async function () {
 
     function require(moduleName, requireName) {
       requireName = canonicalModuleName(requireName, moduleName);
+      if (!modules[requireName]) {
+        requireName += "/index";
+      }
       if (!modules[requireName]) {
         throw new Error(`imported module "${requireName}" does not exist or has not been loaded`);
       }
@@ -47,11 +50,25 @@ window.onload = async function () {
     return new Promise(resolve => { importScript.onload = resolve });
   }
   function createScriptElement(importName) {
-    const importScript = document.createElement("script");
-    document.head.appendChild(importScript);
-    importScript.type = "application/javascript";
-    importScript.src = `${importName}.js`;
-    return new Promise(resolve => { importScript.onload = resolve });
+    return new Promise(resolve => {
+      const importScript = document.createElement("script");
+      document.head.appendChild(importScript);
+      importScript.type = "application/javascript";
+      importScript.src = `${importName}.js`;
+      importScript.onerror = () => {
+        importScript.remove();
+        const importScript2 = document.createElement("script");
+        document.head.appendChild(importScript2);
+        importScript2.type = "application/javascript";
+        importScript2.src = `${importName}/index.js`;
+        importScript2.onload = () => {
+          resolve();
+        }
+      }
+      importScript.onload = () => {
+        resolve();
+      }
+    });
   }
   const importScripts = document.querySelectorAll("script[type=umd]");
   let importPromises = Array.from(importScripts).map(changeScriptType);
