@@ -1,4 +1,12 @@
-import jazz, { Component, StyleMap, /*State */ } from "@dragonpop/jazz";
+import jazz, {
+  Component,
+  StyleMap,
+  // ConcreteHtmlComponent,
+  // Foreach,
+  // HtmlComponent,
+  // HtmlInputComponent,
+  // TextComponent
+} from "@dragonpop/jazz";
 import { FlashCards } from "./app/app";
 
 export type Card = { front: string, back: string };
@@ -138,6 +146,15 @@ class App extends Component<{}, AppState> {
       />
     }
   `;
+
+  // render() {
+  //   const input = new HtmlInputComponent();
+  //   const text = new TextComponent("hello, world!");
+  //   text.bind(input, (props, state) => ({ textContent: state.value.value }))
+  //   const span = new ConcreteHtmlComponent("span");
+  //   span.children = [input, text];
+  //   return [span];
+  // }
 }
 
 (window as any).App = new App();

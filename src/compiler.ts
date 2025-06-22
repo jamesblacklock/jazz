@@ -1,5 +1,5 @@
 import ENTITIES from "./htmlEntities";
-import { Component, HtmlComponent, TextComponent, If, Foreach, ForeachItem } from "./index";
+import { Component, TextComponent, If, Foreach, ForeachItem, ConcreteHtmlComponent, HtmlInputComponent, HtmlAnchorComponent } from "./index";
 
 type Directive = {
   type: "directive";
@@ -82,6 +82,9 @@ function parseElement(remaining: string): [E, string] {
   let full, tag;
   [full, tag] = remaining.match(/^<[\s\n]*(\w*)[\s\n]*/)!;
   if (!tag) {
+    throw new Error("syntax error");
+  }
+  if (tag[0].toLowerCase() === tag[0] && !(tag in TAGS!)) {
     throw new Error("syntax error");
   }
 
@@ -260,6 +263,8 @@ function parseTemplate(template: string, inElement: boolean = false): [Ast, stri
 }
 
 export function compileTemplate(component: Component): Component[] {
+  initTags();
+
   const ast = parse(component.template!);
   const nodes = [];
   for (const astNode of ast) {
@@ -270,6 +275,136 @@ export function compileTemplate(component: Component): Component[] {
 
 function parse(template: string): Ast {
   return parseTemplate(template)[0];
+}
+
+type HtmlComponentConstructor = {
+  new (tag: keyof HTMLElementTagNameMap): Component;
+}
+
+let TAGS: { [K in keyof HTMLElementTagNameMap]?: HtmlComponentConstructor } | null = null;
+
+function initTags() {
+  if (TAGS === null) {
+    TAGS = {
+      // void elements
+      area: ConcreteHtmlComponent,
+      base: ConcreteHtmlComponent,
+      br: ConcreteHtmlComponent,
+      col: ConcreteHtmlComponent,
+      embed: ConcreteHtmlComponent,
+      hr: ConcreteHtmlComponent,
+      img: ConcreteHtmlComponent,
+      input: HtmlInputComponent,
+      link: ConcreteHtmlComponent,
+      meta: ConcreteHtmlComponent,
+      source: ConcreteHtmlComponent,
+      track: ConcreteHtmlComponent,
+      wbr: ConcreteHtmlComponent,
+    
+      // text elements
+      script: ConcreteHtmlComponent,
+      style: ConcreteHtmlComponent,
+      textarea: ConcreteHtmlComponent,
+      title: ConcreteHtmlComponent,
+    
+      // normal elements
+      a: HtmlAnchorComponent,
+      abbr: ConcreteHtmlComponent,
+      address: ConcreteHtmlComponent,
+      article: ConcreteHtmlComponent,
+      aside: ConcreteHtmlComponent,
+      audio: ConcreteHtmlComponent,
+      b: ConcreteHtmlComponent,
+      bdi: ConcreteHtmlComponent,
+      bdo: ConcreteHtmlComponent,
+      blockquote: ConcreteHtmlComponent,
+      body: ConcreteHtmlComponent,
+      button: ConcreteHtmlComponent,
+      canvas: ConcreteHtmlComponent,
+      caption: ConcreteHtmlComponent,
+      cite: ConcreteHtmlComponent,
+      code: ConcreteHtmlComponent,
+      colgroup: ConcreteHtmlComponent,
+      data: ConcreteHtmlComponent,
+      datalist: ConcreteHtmlComponent,
+      dd: ConcreteHtmlComponent,
+      del: ConcreteHtmlComponent,
+      details: ConcreteHtmlComponent,
+      dfn: ConcreteHtmlComponent,
+      dialog: ConcreteHtmlComponent,
+      div: ConcreteHtmlComponent,
+      dl: ConcreteHtmlComponent,
+      dt: ConcreteHtmlComponent,
+      em: ConcreteHtmlComponent,
+      fieldset: ConcreteHtmlComponent,
+      figcaption: ConcreteHtmlComponent,
+      figure: ConcreteHtmlComponent,
+      footer: ConcreteHtmlComponent,
+      form: ConcreteHtmlComponent,
+      h1: ConcreteHtmlComponent,
+      h2: ConcreteHtmlComponent,
+      h3: ConcreteHtmlComponent,
+      h4: ConcreteHtmlComponent,
+      h5: ConcreteHtmlComponent,
+      h6: ConcreteHtmlComponent,
+      head: ConcreteHtmlComponent,
+      header: ConcreteHtmlComponent,
+      hgroup: ConcreteHtmlComponent,
+      html: ConcreteHtmlComponent,
+      i: ConcreteHtmlComponent,
+      iframe: ConcreteHtmlComponent,
+      ins: ConcreteHtmlComponent,
+      kbd: ConcreteHtmlComponent,
+      label: ConcreteHtmlComponent,
+      legend: ConcreteHtmlComponent,
+      li: ConcreteHtmlComponent,
+      main: ConcreteHtmlComponent,
+      map: ConcreteHtmlComponent,
+      mark: ConcreteHtmlComponent,
+      menu: ConcreteHtmlComponent,
+      meter: ConcreteHtmlComponent,
+      nav: ConcreteHtmlComponent,
+      noscript: ConcreteHtmlComponent,
+      object: ConcreteHtmlComponent,
+      ol: ConcreteHtmlComponent,
+      optgroup: ConcreteHtmlComponent,
+      option: ConcreteHtmlComponent,
+      output: ConcreteHtmlComponent,
+      p: ConcreteHtmlComponent,
+      picture: ConcreteHtmlComponent,
+      pre: ConcreteHtmlComponent,
+      progress: ConcreteHtmlComponent,
+      q: ConcreteHtmlComponent,
+      rp: ConcreteHtmlComponent,
+      rt: ConcreteHtmlComponent,
+      ruby: ConcreteHtmlComponent,
+      s: ConcreteHtmlComponent,
+      samp: ConcreteHtmlComponent,
+      search: ConcreteHtmlComponent,
+      section: ConcreteHtmlComponent,
+      select: ConcreteHtmlComponent,
+      slot: ConcreteHtmlComponent,
+      small: ConcreteHtmlComponent,
+      span: ConcreteHtmlComponent,
+      strong: ConcreteHtmlComponent,
+      sub: ConcreteHtmlComponent,
+      summary: ConcreteHtmlComponent,
+      sup: ConcreteHtmlComponent,
+      table: ConcreteHtmlComponent,
+      tbody: ConcreteHtmlComponent,
+      td: ConcreteHtmlComponent,
+      template: ConcreteHtmlComponent,
+      tfoot: ConcreteHtmlComponent,
+      th: ConcreteHtmlComponent,
+      thead: ConcreteHtmlComponent,
+      time: ConcreteHtmlComponent,
+      tr: ConcreteHtmlComponent,
+      u: ConcreteHtmlComponent,
+      ul: ConcreteHtmlComponent,
+      var: ConcreteHtmlComponent,
+      video: ConcreteHtmlComponent,
+    } as const;
+  }
 }
 
 function buildComponent(node: AstNode, componentContext: Component): Component[] {
@@ -336,7 +471,9 @@ function buildComponent(node: AstNode, componentContext: Component): Component[]
     return componentContext.children;
   } else {
     if (node.tag[0] === node.tag[0].toLowerCase()) {
-      component = new HtmlComponent(node.tag as keyof HTMLElementTagNameMap);
+      const tag = node.tag as keyof HTMLElementTagNameMap;
+      const Constructor = TAGS![tag]!;
+      component = new Constructor(tag);
     } else {
       const Constructor = componentContext.imports?.[node.tag];
       if (!Constructor) {
