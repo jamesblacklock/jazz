@@ -1,5 +1,5 @@
 import ENTITIES from "./htmlEntities";
-import { Component, HtmlComponent, TextComponent, If, Foreach, ForeachContext } from "./index";
+import { Component, HtmlComponent, TextComponent, If, Foreach, ForeachItem } from "./index";
 
 type Directive = {
   type: "directive";
@@ -10,6 +10,12 @@ type Directive = {
   elseAst?: Ast;
 } | {
   directive: "children";
+} | {
+  directive: "foreach";
+  itemName: string;
+  indexName?: string;
+  expr: string;
+  ast: Ast;
 });
 
 interface Script {
@@ -29,11 +35,11 @@ interface E {
 
 function parseText(remaining: string) {
   let offset = 0;
-  while (remaining[offset] && !remaining[offset].match(/[<\{\}@]/)) {
+  while (remaining[offset] && !remaining.slice(offset, offset + 2).match(/^(?:[<\{\}@]|\/\/)/)) {
     offset++;
   }
-  const match = remaining.slice(0, offset).replaceAll(/[\s\n]+/g, " ");
-  const entitiesSplit = match.split(/(?<=&\w+;)|(?=&\w+;)/);
+  const match = remaining.slice(0, offset);
+  const entitiesSplit = match.replaceAll(/[\s\n]+/g, " ").split(/(?<=&\w+;)|(?=&\w+;)/);
   let result = "";
   for (let piece of entitiesSplit) {
     if (piece.match(/^&\w+;$/)) {
@@ -54,11 +60,11 @@ function parseProps(remaining: string) {
     remaining = remaining.slice(full.length);
     let value;
     if (remaining[0] === '"') {
-      value = remaining.match(/^"((?:\\"|[^"])*)"/)?.[1];
+      value = remaining.match(/^("(?:\\"|[^"])*")/)?.[1];
       if (value === undefined) {
         throw new Error("syntax error");
       }
-      remaining = remaining.slice(value.length + 2);
+      remaining = remaining.slice(value.length);
     } else {
       if (remaining[0] !== '{') {
         throw new Error("syntax error");
@@ -124,7 +130,7 @@ function parseScript(remaining: string, initialOffset = 1): [Script, string] {
 
 }
 
-function parseDirective(remaining: string): [Directive, string] {
+function parseDirective(remaining: string, allowElseIf = false): [Directive, string] {
   let braceEnclosed = remaining[0] === '{';
   let full, directive;
   if (braceEnclosed) {
@@ -146,7 +152,7 @@ function parseDirective(remaining: string): [Directive, string] {
       throw new Error("syntax error");
     }
 
-    if (directive === "if") {
+    if (directive === "if" || (allowElseIf && directive === "elseif")) {
       let script;
       [script, remaining] = parseScript(remaining);
       full = remaining.match(/^[\s\n]*\{/)?.[0];
@@ -161,15 +167,45 @@ function parseDirective(remaining: string): [Directive, string] {
       }
 
       let elseAst;
-      full = remaining.match(/^\}[\s\n]*@else[\s\n]*{/)?.[0];
+      full = remaining.match(/^}[\s\n]*(?=@elseif\b)/)?.[0];
       if (full) {
-        [elseAst, remaining] = parseTemplate(remaining.slice(full.length), true);
-        if (remaining[0] !== '}') {
-          throw new Error("syntax error");
+        remaining = remaining.slice(full.length);
+        let elseIf;
+        [elseIf, remaining] = parseDirective(remaining, true);
+        elseAst = [elseIf];
+      } else {
+        full = remaining.match(/^\}[\s\n]*@else[\s\n]*{/)?.[0];
+        if (full) {
+          [elseAst, remaining] = parseTemplate(remaining.slice(full.length), true);
+          if (remaining[0] !== '}') {
+            throw new Error("syntax error");
+          }
         }
+        remaining = remaining.slice(1);
       }
-      remaining = remaining.slice(1);
+
       result = { type: "directive", directive: "if", expr: script.expr, ast, elseAst };
+    } else if (directive === "foreach") {
+      let itemName, indexName;
+      [full, itemName, indexName] = remaining.match(/^\{[\s\n]*(\w+)(?:[\s\n]*,[\s\n]*(\w+))?[\s\n]+in[\s\n]+/) ?? [];
+      if (!full) {
+        throw new Error("syntax error");
+      }
+      let script;
+      [script, remaining] = parseScript(remaining.slice(full.length), 0);
+      full = remaining.match(/^[\s\n]*\{/)?.[0];
+      if (!full) {
+        throw new Error("syntax error");
+      }
+
+      let ast;
+      [ast, remaining] = parseTemplate(remaining.slice(full.length), true);
+      if (remaining[0] !== '}') {
+        throw new Error("syntax error");
+      }
+
+      remaining = remaining.slice(1);
+      result = { type: "directive", directive: "foreach", itemName, indexName, expr: script.expr, ast };
     } else {
       throw new Error("syntax error");
     }
@@ -197,7 +233,10 @@ function parseTemplate(template: string, inElement: boolean = false): [Ast, stri
       }
       throw new Error("syntax error");
     }
-    if (remaining[0] === '<') {
+    if (remaining.slice(0, 2) === '//') {
+      const comment = remaining.match(".*")![0];
+      remaining = remaining.slice(comment.length);
+    } else if (remaining[0] === '<') {
       [result, remaining] = parseElement(remaining);
       ast.push(result);
     } else if (remaining[0] === '{') {
@@ -222,10 +261,11 @@ function parseTemplate(template: string, inElement: boolean = false): [Ast, stri
 
 export function compileTemplate(component: Component): Component[] {
   const ast = parse(component.template!);
-  if (ast.length !== 1) {
-    throw new Error("component must have a single root");
+  const nodes = [];
+  for (const astNode of ast) {
+    nodes.push(...buildComponent(astNode, component));
   }
-  return buildComponent(ast[0], component);
+  return nodes;
 }
 
 function parse(template: string): Ast {
@@ -233,15 +273,44 @@ function parse(template: string): Ast {
 }
 
 function buildComponent(node: AstNode, componentContext: Component): Component[] {
+  let args = "$props, $state";
+  let bindings = "";
+  const usedBindings = new Set;
+  let propsComponent = componentContext;
+  if (componentContext instanceof ForeachItem) {
+    args += ", $foreach"
+    for (const itemName in componentContext.context.bindings) {
+      bindings += `let ${itemName} = $foreach.${itemName}.items[$foreach.${itemName}.index]; `;
+      usedBindings.add(itemName);
+      if (componentContext.context.bindings[itemName].indexName) {
+        bindings += `let ${componentContext.context.bindings[itemName].indexName} = $foreach.${itemName}.index; `;
+        usedBindings.add(itemName);
+      }
+    }
+    propsComponent = componentContext.componentContext;
+  }
+  for (const propName in propsComponent.state.value) {
+    if (!usedBindings.has(propName)) {
+      bindings += `let ${propName} = $state.value.${propName}; `;
+      usedBindings.add(propName);
+    }
+  }
+  for (const propName in propsComponent.props.value) {
+    if (!usedBindings.has(propName)) {
+      bindings += `let ${propName} = $props.${propName}; `;
+      usedBindings.add(propName);
+    }
+  }
+
   let component: Component;
   if (typeof node === "string") {
     component = new TextComponent(node);
   } else if (node.type === "script") {
-    const script: (value: any, state: any) => any = eval(`(props, state) => { return { textContent: (${node.expr}).toString() }; }`);
+    const script: (value: any, state: any) => any = eval(`(${args}) => { ${bindings}return { textContent: (${node.expr}).toString() }; }`);
     component = new TextComponent("");
     component.bind(componentContext, script);
   } else if (node.type === "directive" && node.directive === "if") {
-    const f: (value: any, state: any) => any = eval(`(props, state, $foreach) => { return { cond: (${node.expr}) }; }`);
+    const f: (value: any, state: any) => any = eval(`(${args}) => { ${bindings}return { cond: (${node.expr}) }; }`);
     let ifComponent = new If();
     ifComponent.bind(componentContext, f);
     for (const child of node.ast) {
@@ -253,6 +322,16 @@ function buildComponent(node: AstNode, componentContext: Component): Component[]
       elseChild.forEach(e => ifComponent.elseChildren.add(e));
     }
     component = ifComponent;
+  } else if (node.type === "directive" && node.directive === "foreach") {
+    const f: (value: any, state: any) => any = eval(`(${args}) => { ${bindings}return { items: (${node.expr}) }; }`);
+    const foreachComponent = new Foreach(node.itemName, node.indexName, componentContext);
+    foreachComponent.bind(componentContext, f);
+    const foreachItem = new ForeachItem(componentContext, foreachComponent.context, foreachComponent.itemName);
+    for (const child of node.ast) {
+      foreachItem.children.push(...buildComponent(child, foreachItem));
+    }
+    foreachComponent.children = [foreachItem];
+    component = foreachComponent;
   } else if (node.type === "directive" && node.directive === "children") {
     return componentContext.children;
   } else {
@@ -277,11 +356,11 @@ function buildComponent(node: AstNode, componentContext: Component): Component[]
           script += `"${name}": (${value}), `
         } else {
           isBinding = true;
-          script = script + `"${name}": (${value.expr}), `;
+          script = script + `"${name}": ${value.expr}, `;
         }
       }
       if (isBinding) {
-        script = `(props, state) => { return { ${script} }; }`;
+        script = `(${args}) => { ${bindings}return { ${script} }; }`;
         const f = eval(script);
         component.bind(componentContext, f);
       } else {

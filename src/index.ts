@@ -1,6 +1,5 @@
 export type * from "./htmlTypes";
 import { compileTemplate } from "./compiler";
-// export type * from "./types";
 import type {
   EventsMap,
   HtmlAProps,
@@ -8,30 +7,37 @@ import type {
   HtmlInputProps,
   StyleMap,
 } from "./htmlTypes";
-// import {
-//   // DebugInfo,
-//   // Fragment,
-//   Props,
-//   // UIElement,
-//   // UINode,
-//   Component,
-//   // ComponentFunction,
-//   ComponentType,
-//   // RenderOptions,
-//   // RefObject,
-// } from "./types";
+
+export type RenderOptions = {
+  debug?: boolean;
+};
 
 type AnyRecord = Record<keyof any, any>;
 
+class Binding<P> {
+  f: (arg0: any, arg1: any, arg2: any) => P;
+  args: [any, any, any];
+  constructor(f: Binding<P>["f"], args: Binding<P>["args"]) {
+    this.f = f;
+    this.args = args;
+  }
+  call() {
+    return this.f.call(null, ...this.args);
+  }
+  clone() {
+    return new Binding(this.f, [...this.args]);
+  }
+}
+
 class Props<P extends AnyRecord> {
   value: P;
-  binding: (() => P) | null = null;
+  binding: Binding<P> | null | undefined = null;
   constructor(props: P) {
     this.value = props;
     this.binding = null;
   }
   update(newValue?: P): boolean {
-    const props = newValue ?? this.binding?.();
+    const props = newValue ?? this.binding?.call();
     if (props == null) {
       return false;
     }
@@ -56,6 +62,10 @@ class Props<P extends AnyRecord> {
           return false;
         }
       } else if (l?.[k] !== r?.[k]) {
+        // THIS IS A HACK!!!!
+        if (l?.[k] instanceof Function && r?.[k] instanceof Function && l[k].toString() === r[k].toString()) {
+          continue;
+        }
         return false;
       }
     }
@@ -74,6 +84,16 @@ export abstract class Component<P extends AnyRecord = {}, S extends AnyRecord = 
   desc: WeakRef<Component<any, any>>[] = [];
   weakRef: WeakRef<Component<P, S>> | null = null;
   updating: boolean = false;
+  display = { _visible: false };
+  get visible() { return this.display._visible }
+  template?: string;
+  imports?: Record<string, ComponentConstructor<AnyRecord>>;
+  domParent?: HTMLElement;
+  renderOptions: RenderOptions = {};
+  domNode?: HTMLElement | Text;
+  rc: number = 0;
+  nodes: Component[] | null = null;
+  children: Component[] = [];
 
   constructor(props: P, state: S) {
     this.props = new Props(props);
@@ -82,10 +102,32 @@ export abstract class Component<P extends AnyRecord = {}, S extends AnyRecord = 
   }
   bind<Q extends AnyRecord, R extends AnyRecord>(other: Component<Q, R>, f: (props: Q, state: State<R>) => P) {
     this.unbind();
-    this.props.binding = f.bind(null, other.props.value, other.state);
+    let props, state, isForeachItem;
+    if (other instanceof ForeachItem) {
+      let c = other.componentContext;
+      while (c instanceof ForeachItem) { c = c.componentContext }
+      props = c.props;
+      state = c.state;
+      isForeachItem = true
+    } else {
+      props = other.props;
+      state = other.state;
+    }
+    this.props.binding = new Binding(f, [props.value, state, null]);
     this.weakRef = { value: this };
     other.desc.push(this.weakRef);
-    this.update();
+    if (isForeachItem) {
+      return;
+    }
+    if (this.visible) {
+      this.update();
+    }
+  }
+  bindForeachContext(foreachItem?: ForeachItem) {
+    if (foreachItem && this.props.binding) {
+      this.props.binding.args[2] = foreachItem.context.bindings;
+      foreachItem.desc.push({ value: this });
+    }
   }
   unbind() {
     if (this.weakRef) {
@@ -94,7 +136,10 @@ export abstract class Component<P extends AnyRecord = {}, S extends AnyRecord = 
     }
   }
   update(newProps?: P, newState?: S): boolean {
-    const propsChanged = this.props.update(newProps)
+    if (!this.visible) {
+      return false;
+    }
+    const propsChanged = this.props.update(newProps) || this instanceof ForeachItem;
     if (propsChanged || this.internalState.props.update(newState) || this.rc === 0) {
       if (this.updating) {
         return false;
@@ -119,36 +164,62 @@ export abstract class Component<P extends AnyRecord = {}, S extends AnyRecord = 
     }
     return false;
   }
-  render(): Component | Component[] { return this.children; }
+  render(): Component[] { return this.children; }
   onPropsChanged(): void {}
-
-
-
-  template?: string;
-  imports?: Record<string, ComponentConstructor<AnyRecord>>;
-  domParent?: HTMLElement;
-  domNode?: HTMLElement | Text;
-  rc: number = 0;
-  remove?: boolean;
-  nodes: Component[] | null = null;
-  children: Component[] = [];
+  setVisible(visible: boolean) {
+    this.display._visible = visible;
+  }
+  clone(index?: number, foreachItem?: ForeachItem): Component {
+    let clone: Component;
+    if (this instanceof HtmlComponent) {
+      clone = new HtmlComponent(this.tag);
+    } else if (this instanceof TextComponent) {
+      clone = new TextComponent(this.props.value.textContent);
+    } else if (this instanceof If) {
+      clone = new If();
+    } else if (this instanceof Foreach) {
+      clone = new Foreach(this.itemName, this.indexName, this.componentContext);
+    } else if (this instanceof ForeachItem) {
+      let context = this.context;
+      if (foreachItem) {
+        context = cloneForeachContext(foreachItem?.context);
+        context.bindings[this.itemName] = { ...this.context.bindings[this.itemName] };
+        index = undefined;
+      }
+      const foreachClone = new ForeachItem(this.componentContext, context, this.itemName, index);
+      foreachItem = foreachClone;
+      clone = foreachClone;
+    } else {
+      clone = new Clone();
+    }
+    clone.props.binding = this.props.binding?.clone();
+    clone.domParent = this.domParent;
+    clone.renderOptions = this.renderOptions;
+    clone.display = this.display;
+    for (const child of this.children) {
+      const childClone = child.clone(index, foreachItem);
+      if (this instanceof If && this.elseChildren.has(child)) {
+        (clone as If).elseChildren.add(childClone);
+      }
+      clone.children.push(childClone);
+    }
+    clone.bindForeachContext(foreachItem);
+    return clone;
+  }
 }
 
-// let globalComponentContext: Component<any, any> | null = null;
+class Clone extends Component<any, any> {
+  constructor() {
+    super({}, {});
+  }
+}
 
-// export type Props = Record<keyof any, any> | undefined | null;
-// export type TextNodeProps = { textContent: string };
 export type ComponentConstructor<P extends AnyRecord> = { new(): Component<P> }
 
 // type SetterOptions = { dirty?: boolean, quiet?: boolean };
 // type Setter<T> = (value: T, options?: SetterOptions) => void
 
 export interface State<T extends AnyRecord> {
-  // use<T>(name: string|number, value: T | (() => T)): [T, Setter<T>];
-  // useRef<T>(name: string|number, value?: T): RefObject<T>;
-  // useMemo<T>(name: string|number, value: (() => T), deps: any[]): T;
-  // useCallback<T>(name: string|number, callback: (() => T), deps: any[]): T;
-  // useEffect(name: string|number, effect: (() => (() => void) | void), deps: any[]): void;
   set: Setter<T>;
   readonly value: T;
 }
@@ -156,7 +227,7 @@ export interface State<T extends AnyRecord> {
 let renderQueueTimer: number | null = null;
 let renderQueue: Component[] = [];
 
-function requestRender(n: Component/*, options: RenderOptions*/) {
+function requestRender(n: Component) {
   renderQueue.push(n);
   if (renderQueueTimer === null) {
     renderQueueTimer = requestAnimationFrame(() => {
@@ -166,20 +237,17 @@ function requestRender(n: Component/*, options: RenderOptions*/) {
           continue;
         }
         rendered.add(node);
-        // if (node.state!.commit()) {
-        //   let renderState: RenderState = {r: Symbol(), options, changedDuringRender: new Set};
-          render(/*renderState,*/ node/*, node.component*/);
-        //   while (renderState.changedDuringRender.size > 0) {
-        //     const reRender = renderState.changedDuringRender;
-        //     renderState = {r: Symbol(), options, changedDuringRender: new Set};
-        //     for (const node of reRender) {
-        //       node.state!.commit();
-        //       render(renderState, node, node.component);
-        //       renderState = {r: Symbol(), options, changedDuringRender: renderState.changedDuringRender};
-        //     }
+        render(node);
+        // while (renderState.changedDuringRender.size > 0) {
+        //   const reRender = renderState.changedDuringRender;
+        //   renderState = {r: Symbol(), options, changedDuringRender: new Set};
+        //   for (const node of reRender) {
+        //     node.state!.commit();
+        //     render(renderState, node, node.component);
+        //     renderState = {r: Symbol(), options, changedDuringRender: renderState.changedDuringRender};
         //   }
-          updateHtml(node);
         // }
+        updateHtml(node);
       }
       renderQueueTimer = null;
       renderQueue = [];
@@ -233,9 +301,6 @@ class InternalState<T extends AnyRecord> implements State<T> {
   // }
   // useRef<T>(name: string|number, value?: T): RefObject<T> {
   //   return this.useInternal(name, { current: value }, null, false, false)[0];
-  // }
-  // useMemo<T>(name: string|number, value: (() => T), deps: any[]): T {
-  //   return this.useInternal(name, value, deps, true, false)[0];
   // }
   // useCallback<T>(name: string|number, callback: (() => T), deps: any[]): T {
   //   return this.useInternal(name, callback, deps, false, false)[0];
@@ -319,7 +384,7 @@ function updateHtml(
   nextSibling: Node | null = null,
   checkSiblings: boolean = false,
 ): Node | null {
-  if (component.remove) {
+  if (!component.visible) {
     removeNode(component);
     return nextSibling;
   }
@@ -333,7 +398,7 @@ function updateHtml(
   let childCheckSiblings = !!(component.domNode || checkSiblings);
   let lastInserted: Node | null = component.domNode ? null : nextSibling;
   for (const childNode of reversed(component.nodes ?? [])) {
-    const isPortalChild = false; //childNode.domParent !== (node.domNode ?? node.domParent);
+    const isPortalChild = false; // childNode.domParent !== (node.domNode ?? node.domParent);
     const res = updateHtml(childNode, lastInserted, childCheckSiblings && !isPortalChild);
     if (!isPortalChild) {
       lastInserted = res ?? lastInserted;
@@ -354,14 +419,8 @@ function removeNode(component: Component) {
   component.nodes?.forEach(removeNode);
 }
 
-// type RenderState = {
-//   r: Symbol;
-//   options: RenderOptions;
-//   changedDuringRender: Set<VNode>;
-// }
-
-function render(/*state: RenderState, */ component: Component) {
-  if (component.remove) {
+function render(component: Component) {
+  if (!component.visible) {
     return;
   }
 
@@ -380,57 +439,56 @@ function render(/*state: RenderState, */ component: Component) {
       }
       component.updateHtml();
     }
-    if (!component.nodes) {
-      let rendered: Component | Component[];
+    if (!component.nodes || component instanceof If) {
+      let rendered: Component[];
       if (component.template) {
         rendered = compileTemplate(component);
       } else {
         rendered = component.render();
       }
-      if (!Array.isArray(rendered)) {
-        rendered = [rendered];
-      }
       component.nodes = rendered;
-      const isElse = component instanceof If && !component.props.value.cond;
+      const isForeach = component instanceof Foreach;
       for (const child of component.nodes) {
         child.domParent = component.domNode as HTMLElement ?? component.domParent;
-        if (isElse && !component.elseChildren.has(child)) {
+        child.renderOptions = component.renderOptions;
+        if (!(component instanceof If)) {
+          child.display = component.display;
+        }
+        if (isForeach) {
           continue;
         }
+        child.update();
         render(child);
       }
       component.update();
     }
 
-    if (component instanceof If) {
-      for (const child of component.nodes) {
-        child.remove = component.props.value.cond === component.elseChildren.has(child);
-        if (!child.remove && !child.nodes) {
-          render(child);
+    if (component instanceof Foreach) {
+      const nodes = component.nodes ?? [];
+      while (nodes.length > component.items.length) {
+        const node = nodes.pop()!;
+        removeNode(node);
+      }
+      const child = component.children[0] as ForeachItem;
+      for (let i = 0; i < component.items.length; i++) {
+        let clone;
+        if (i < nodes.length) {
+          clone = nodes[i];
+          // clone.bindForeachContext(component);
+        } else {
+          clone = child.clone(i);
+        }
+        if (i >= nodes.length) {
+          nodes.push(clone);
         }
       }
-    }
+      component.nodes = nodes;
 
-  // if (component.rc === 0) {
-  //   for (const node of component.nodes) {
-  //     requestRender(node);
-  //   }
-  // }
-  // let componentFactory: ComponentFunction = typeof component.type === "string"
-  //   ? (HTML_COMPONENT[component.type] ?? htmlComponent).bind(null, node.domNode as HTMLElement) as ComponentFunction
-  //   : component.type;
-  // currentComponentState = node.state;
-  // currentComponentStateIndex = 0;
-  // node.state!.dirty = false;
-  // const renderedContent = componentFactory(
-  //   {content: component.content, ...component.props},
-  //   node.state!,
-  //   { debug: state.options?.debug, renderCount: node.rc }
-  // );
-  // if (node.state!.dirty) {
-  //   state.changedDuringRender.add(node);
-  // }
-  // component.content = uiNodeToComponentArray(renderedContent);
+      for (const node of component.nodes) {
+        render(node);
+        node.update();
+      }
+    }
   // const renderedNodes: VNode[] = [];
   // const portalChildren: VNode[] = [];
   // for (const childComponent of component.content) {
@@ -452,8 +510,6 @@ function render(/*state: RenderState, */ component: Component) {
   // node.portalChildren = portalChildren;
   }
 
-  // node.component = component;
-  // node.component.changed = false;
   component.rc++;
 }
 
@@ -482,7 +538,8 @@ const htmlComponent: HtmlComponentFunction = function htmlComponent(component) {
   }
   const eventNames = Array.from(new Set([...Object.keys(events), ...Object.keys(component.attachedEvents)])) as (keyof EventsMap<any>)[];
   for (const event of eventNames) {
-    if(events[event] !== component.attachedEvents[event]) {
+    // THIS IS A HACK!!!!
+    if(events[event]?.toString() !== component.attachedEvents[event]?.toString()) {
       if (component.attachedEvents[event]) {
         e.removeEventListener(event, component.attachedEvents[event] as any as EventListener);
         delete component.attachedEvents[event];
@@ -510,9 +567,9 @@ const htmlComponent: HtmlComponentFunction = function htmlComponent(component) {
   //   }
   // }
 
-  // if (debugInfo.debug) {
-  //   e.setAttribute("data-render-count", debugInfo.renderCount.toString());
-  // }
+  if (component.renderOptions.debug) {
+    e.setAttribute("data-render-count", (component.rc + 1).toString());
+  }
 
   return props.content;
 }
@@ -572,37 +629,95 @@ export class If extends Component<{ cond: boolean }> {
     super({ cond: false }, {});
   }
   elseChildren = new Set<Component>;
+  setVisible(visible: boolean) {
+    super.setVisible(visible);
+    this.visibilityChanged();
+  }
+  visibilityChanged() {
+    for (const child of this.children) {
+      child.setVisible(this.visible && this.props.value.cond !== this.elseChildren.has(child));
+      if (!child.visible) {
+        removeNode(child);
+      }
+    }
+  }
+  onPropsChanged() {
+    this.visibilityChanged();
+  }
+  render() {
+    this.visibilityChanged();
+    return this.children.filter(child => child.visible);
+  }
 }
 
+type ForeachContext = { init: boolean, bindings: { [key: string]: { items: any[], index: number | null, indexName?: string } } };
+
+function cloneForeachContext(context: ForeachContext, itemName?: string, index?: number) {
+  const result: ForeachContext = { init: index != null, bindings: {} };
+  for (const name in context.bindings) {
+    result.bindings[name] = { ...context.bindings[name] };
+  }
+  if (itemName !== undefined && index !== undefined) {
+    result.bindings[itemName].index = index;
+  }
+  return result;
+}
+
+export class Foreach<T> extends Component<{ items: Iterable<T> }> {
+  itemName: string;
+  indexName?: string;
+  items: T[] = [];
+  context: ForeachContext;
+  componentContext: Component;
+
+  constructor(itemName: string, indexName: string | undefined, componentContext: Component) {
+    super({ items: [] }, {});
+    this.itemName = itemName;
+    this.indexName = indexName;
+    this.context = { init: false, bindings: {} };
+    if (componentContext instanceof ForeachItem) {
+      this.context.bindings = { ...componentContext.context.bindings };
+    }
+    this.context.bindings[this.itemName] = { items: this.items, index: null, indexName }
+    if (indexName) {
+      delete this.context.bindings[indexName];
+    }
+    this.componentContext = componentContext;
+  }
+  onPropsChanged() {
+    this.items.splice(0, this.items.length);
+    this.items.push(...(this.props.value.items ?? []));
+  }
+  render() {
+    const child = this.children[0] as ForeachItem;
+    child.context.bindings[this.itemName].items = this.items;
+    child.display = this.display;
+    child.domParent = this.domParent;
+    child.renderOptions = this.renderOptions;
+    return [];
+  }
+}
+
+export class ForeachItem extends Component {
+  context: ForeachContext;
+  componentContext: Component;
+  itemName: string;
+  constructor(componentContext: Component, foreachContext: ForeachContext, itemName: string, index?: number) {
+    super({}, {});
+    this.componentContext = componentContext;
+    this.itemName = itemName;
+    this.context = cloneForeachContext(foreachContext, itemName, index);
+  }
+}
 
 const DOM_ROOTS = new Map<Node, Component>;
 
-export function mountComponent(domTarget: HTMLElement, node: Component/*, options: RenderOptions = {}*/) {
-  // let node = DOM_ROOTS.get(domTarget);
-  // if (!node) {
-  //   node = {
-  //     rc: 0,
-  //     component: {
-  //       type: component.type, 
-  //       key: component.key
-  //     },
-  //     nodes: [],
-  //     portalChildren: [],
-  //     domParent: domTarget,
-  //   };
-  //   node.state = new InternalState(node, options);
-  //   node.state.forceRender = true;
-    DOM_ROOTS.set(domTarget, node);
-  // }
-  // node.component = { type: component.type, key: component.key };
+export function mountComponent(domTarget: HTMLElement, node: Component<any, any>, options: RenderOptions = {}) {
+  DOM_ROOTS.set(domTarget, node);
   node.domParent = domTarget;
-  requestRender(node/*, options*/);
-  console.log(node);
-  (window as any).c = node;
-  (window as any).r = () => {
-    requestRender(node/*, options*/);
-    console.log(node);
-  };
+  node.renderOptions = options;
+  node.setVisible(true);
+  requestRender(node);
 }
 
 export default {

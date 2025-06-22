@@ -25,9 +25,6 @@
 // export type RefObject<T = any> = { current?: T };
 // export type RefFunction<T = any> = ((current: T) => void)
 // export type Ref<T = any> = RefObject<T> | RefFunction<T>;
-// export type RenderOptions = {
-//   debug?: boolean;
-// };
 
 
 
