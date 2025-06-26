@@ -11,7 +11,7 @@
     "jsxFactory": "jazz.createElement",
     "jsxFragmentFactory": "jazz.fragment",
     "outDir": "dist",
-    "target": "es2016",
+    "target": "esnext",
     "module": "umd",
     "baseUrl": "src",
   },

@@ -12,7 +12,7 @@ window.onload = async function () {
   }
 
   window.define = function(imports, factory) {
-    const defineModule = document.currentScript.getAttribute('src').match("(.*?)(?:.js)?$")[1];
+    const defineModule = document.currentScript.getAttribute("src").match("(.*?)(?:.js)?$")[1];
     unimported.delete(defineModule);
 
     for (let importName of imports.slice(2)) {

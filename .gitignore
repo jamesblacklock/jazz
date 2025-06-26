@@ -3,3 +3,8 @@ node_modules
 dist
 /*.d.ts
 /*.js
+
+
+# Added by cargo
+
+/rust/target
