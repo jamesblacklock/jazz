@@ -1,5 +1,5 @@
 import ENTITIES from "./htmlEntities";
-import { Component, TextComponent, If, Foreach, ForeachItem, ConcreteHtmlComponent, HtmlInputComponent, HtmlAnchorComponent } from "./index";
+import { Component, COMPONENT_MAP, ForeachItemComponent } from "./index";
 
 type Directive = {
   type: "directive";
@@ -262,13 +262,19 @@ function parseTemplate(template: string, inElement: boolean = false): [Ast, stri
   return [ast, remaining] as const;
 }
 
-export function compileTemplate(component: Component): Component[] {
+export function compileTemplate(component: Component<any, any, any>): Component[] {
   initTags();
 
-  const ast = parse(component.template!);
+  const ast = parse(component.config.template!);
   const nodes = [];
-  for (const astNode of ast) {
-    nodes.push(...buildComponent(astNode, component));
+  if (component instanceof Component) {
+    for (const astNode of ast) {
+      nodes.push(...buildComponent(astNode, component));
+    }
+  } else {
+    for (const astNode of ast) {
+      nodes.push(...buildComponent(astNode, component));
+    }
   }
   return nodes;
 }
@@ -278,7 +284,7 @@ function parse(template: string): Ast {
 }
 
 type HtmlComponentConstructor = {
-  new (tag: keyof HTMLElementTagNameMap): Component;
+  (tag: keyof HTMLElementTagNameMap): Component<any, any, any>;
 }
 
 let TAGS: { [K in keyof HTMLElementTagNameMap]?: HtmlComponentConstructor } | null = null;
@@ -287,142 +293,142 @@ function initTags() {
   if (TAGS === null) {
     TAGS = {
       // void elements
-      area: ConcreteHtmlComponent,
-      base: ConcreteHtmlComponent,
-      br: ConcreteHtmlComponent,
-      col: ConcreteHtmlComponent,
-      embed: ConcreteHtmlComponent,
-      hr: ConcreteHtmlComponent,
-      img: ConcreteHtmlComponent,
-      input: HtmlInputComponent,
-      link: ConcreteHtmlComponent,
-      meta: ConcreteHtmlComponent,
-      source: ConcreteHtmlComponent,
-      track: ConcreteHtmlComponent,
-      wbr: ConcreteHtmlComponent,
+      area: Component.newHtmlComponent,
+      base: Component.newHtmlComponent,
+      br: Component.newHtmlComponent,
+      col: Component.newHtmlComponent,
+      embed: Component.newHtmlComponent,
+      hr: Component.newHtmlComponent,
+      img: Component.newHtmlComponent,
+      input: Component.newHtmlInputComponent,
+      link: Component.newHtmlComponent,
+      meta: Component.newHtmlComponent,
+      source: Component.newHtmlComponent,
+      track: Component.newHtmlComponent,
+      wbr: Component.newHtmlComponent,
     
       // text elements
-      script: ConcreteHtmlComponent,
-      style: ConcreteHtmlComponent,
-      textarea: ConcreteHtmlComponent,
-      title: ConcreteHtmlComponent,
+      script: Component.newHtmlComponent,
+      style: Component.newHtmlComponent,
+      textarea: Component.newHtmlComponent,
+      title: Component.newHtmlComponent,
     
       // normal elements
-      a: HtmlAnchorComponent,
-      abbr: ConcreteHtmlComponent,
-      address: ConcreteHtmlComponent,
-      article: ConcreteHtmlComponent,
-      aside: ConcreteHtmlComponent,
-      audio: ConcreteHtmlComponent,
-      b: ConcreteHtmlComponent,
-      bdi: ConcreteHtmlComponent,
-      bdo: ConcreteHtmlComponent,
-      blockquote: ConcreteHtmlComponent,
-      body: ConcreteHtmlComponent,
-      button: ConcreteHtmlComponent,
-      canvas: ConcreteHtmlComponent,
-      caption: ConcreteHtmlComponent,
-      cite: ConcreteHtmlComponent,
-      code: ConcreteHtmlComponent,
-      colgroup: ConcreteHtmlComponent,
-      data: ConcreteHtmlComponent,
-      datalist: ConcreteHtmlComponent,
-      dd: ConcreteHtmlComponent,
-      del: ConcreteHtmlComponent,
-      details: ConcreteHtmlComponent,
-      dfn: ConcreteHtmlComponent,
-      dialog: ConcreteHtmlComponent,
-      div: ConcreteHtmlComponent,
-      dl: ConcreteHtmlComponent,
-      dt: ConcreteHtmlComponent,
-      em: ConcreteHtmlComponent,
-      fieldset: ConcreteHtmlComponent,
-      figcaption: ConcreteHtmlComponent,
-      figure: ConcreteHtmlComponent,
-      footer: ConcreteHtmlComponent,
-      form: ConcreteHtmlComponent,
-      h1: ConcreteHtmlComponent,
-      h2: ConcreteHtmlComponent,
-      h3: ConcreteHtmlComponent,
-      h4: ConcreteHtmlComponent,
-      h5: ConcreteHtmlComponent,
-      h6: ConcreteHtmlComponent,
-      head: ConcreteHtmlComponent,
-      header: ConcreteHtmlComponent,
-      hgroup: ConcreteHtmlComponent,
-      html: ConcreteHtmlComponent,
-      i: ConcreteHtmlComponent,
-      iframe: ConcreteHtmlComponent,
-      ins: ConcreteHtmlComponent,
-      kbd: ConcreteHtmlComponent,
-      label: ConcreteHtmlComponent,
-      legend: ConcreteHtmlComponent,
-      li: ConcreteHtmlComponent,
-      main: ConcreteHtmlComponent,
-      map: ConcreteHtmlComponent,
-      mark: ConcreteHtmlComponent,
-      menu: ConcreteHtmlComponent,
-      meter: ConcreteHtmlComponent,
-      nav: ConcreteHtmlComponent,
-      noscript: ConcreteHtmlComponent,
-      object: ConcreteHtmlComponent,
-      ol: ConcreteHtmlComponent,
-      optgroup: ConcreteHtmlComponent,
-      option: ConcreteHtmlComponent,
-      output: ConcreteHtmlComponent,
-      p: ConcreteHtmlComponent,
-      picture: ConcreteHtmlComponent,
-      pre: ConcreteHtmlComponent,
-      progress: ConcreteHtmlComponent,
-      q: ConcreteHtmlComponent,
-      rp: ConcreteHtmlComponent,
-      rt: ConcreteHtmlComponent,
-      ruby: ConcreteHtmlComponent,
-      s: ConcreteHtmlComponent,
-      samp: ConcreteHtmlComponent,
-      search: ConcreteHtmlComponent,
-      section: ConcreteHtmlComponent,
-      select: ConcreteHtmlComponent,
-      slot: ConcreteHtmlComponent,
-      small: ConcreteHtmlComponent,
-      span: ConcreteHtmlComponent,
-      strong: ConcreteHtmlComponent,
-      sub: ConcreteHtmlComponent,
-      summary: ConcreteHtmlComponent,
-      sup: ConcreteHtmlComponent,
-      table: ConcreteHtmlComponent,
-      tbody: ConcreteHtmlComponent,
-      td: ConcreteHtmlComponent,
-      template: ConcreteHtmlComponent,
-      tfoot: ConcreteHtmlComponent,
-      th: ConcreteHtmlComponent,
-      thead: ConcreteHtmlComponent,
-      time: ConcreteHtmlComponent,
-      tr: ConcreteHtmlComponent,
-      u: ConcreteHtmlComponent,
-      ul: ConcreteHtmlComponent,
-      var: ConcreteHtmlComponent,
-      video: ConcreteHtmlComponent,
+      a: Component.newHtmlAnchorComponent,
+      abbr: Component.newHtmlComponent,
+      address: Component.newHtmlComponent,
+      article: Component.newHtmlComponent,
+      aside: Component.newHtmlComponent,
+      audio: Component.newHtmlComponent,
+      b: Component.newHtmlComponent,
+      bdi: Component.newHtmlComponent,
+      bdo: Component.newHtmlComponent,
+      blockquote: Component.newHtmlComponent,
+      body: Component.newHtmlComponent,
+      button: Component.newHtmlComponent,
+      canvas: Component.newHtmlComponent,
+      caption: Component.newHtmlComponent,
+      cite: Component.newHtmlComponent,
+      code: Component.newHtmlComponent,
+      colgroup: Component.newHtmlComponent,
+      data: Component.newHtmlComponent,
+      datalist: Component.newHtmlComponent,
+      dd: Component.newHtmlComponent,
+      del: Component.newHtmlComponent,
+      details: Component.newHtmlComponent,
+      dfn: Component.newHtmlComponent,
+      dialog: Component.newHtmlComponent,
+      div: Component.newHtmlComponent,
+      dl: Component.newHtmlComponent,
+      dt: Component.newHtmlComponent,
+      em: Component.newHtmlComponent,
+      fieldset: Component.newHtmlComponent,
+      figcaption: Component.newHtmlComponent,
+      figure: Component.newHtmlComponent,
+      footer: Component.newHtmlComponent,
+      form: Component.newHtmlComponent,
+      h1: Component.newHtmlComponent,
+      h2: Component.newHtmlComponent,
+      h3: Component.newHtmlComponent,
+      h4: Component.newHtmlComponent,
+      h5: Component.newHtmlComponent,
+      h6: Component.newHtmlComponent,
+      head: Component.newHtmlComponent,
+      header: Component.newHtmlComponent,
+      hgroup: Component.newHtmlComponent,
+      html: Component.newHtmlComponent,
+      i: Component.newHtmlComponent,
+      iframe: Component.newHtmlComponent,
+      ins: Component.newHtmlComponent,
+      kbd: Component.newHtmlComponent,
+      label: Component.newHtmlComponent,
+      legend: Component.newHtmlComponent,
+      li: Component.newHtmlComponent,
+      main: Component.newHtmlComponent,
+      map: Component.newHtmlComponent,
+      mark: Component.newHtmlComponent,
+      menu: Component.newHtmlComponent,
+      meter: Component.newHtmlComponent,
+      nav: Component.newHtmlComponent,
+      noscript: Component.newHtmlComponent,
+      object: Component.newHtmlComponent,
+      ol: Component.newHtmlComponent,
+      optgroup: Component.newHtmlComponent,
+      option: Component.newHtmlComponent,
+      output: Component.newHtmlComponent,
+      p: Component.newHtmlComponent,
+      picture: Component.newHtmlComponent,
+      pre: Component.newHtmlComponent,
+      progress: Component.newHtmlComponent,
+      q: Component.newHtmlComponent,
+      rp: Component.newHtmlComponent,
+      rt: Component.newHtmlComponent,
+      ruby: Component.newHtmlComponent,
+      s: Component.newHtmlComponent,
+      samp: Component.newHtmlComponent,
+      search: Component.newHtmlComponent,
+      section: Component.newHtmlComponent,
+      select: Component.newHtmlComponent,
+      slot: Component.newHtmlComponent,
+      small: Component.newHtmlComponent,
+      span: Component.newHtmlComponent,
+      strong: Component.newHtmlComponent,
+      sub: Component.newHtmlComponent,
+      summary: Component.newHtmlComponent,
+      sup: Component.newHtmlComponent,
+      table: Component.newHtmlComponent,
+      tbody: Component.newHtmlComponent,
+      td: Component.newHtmlComponent,
+      template: Component.newHtmlComponent,
+      tfoot: Component.newHtmlComponent,
+      th: Component.newHtmlComponent,
+      thead: Component.newHtmlComponent,
+      time: Component.newHtmlComponent,
+      tr: Component.newHtmlComponent,
+      u: Component.newHtmlComponent,
+      ul: Component.newHtmlComponent,
+      var: Component.newHtmlComponent,
+      video: Component.newHtmlComponent,
     } as const;
   }
 }
 
-function buildComponent(node: AstNode, componentContext: Component): Component[] {
+function buildComponent(node: AstNode, componentContext: Component<any, any, any>): Component[] {
   let args = "$props, $state";
   let bindings = "";
   const usedBindings = new Set;
   let propsComponent = componentContext;
-  if (componentContext instanceof ForeachItem) {
+  if (componentContext.type === "ForeachItem") {
     args += ", $foreach"
-    for (const itemName in componentContext.context.bindings) {
+    for (const itemName in componentContext.config.data.context.bindings) {
       bindings += `let ${itemName} = $foreach.${itemName}.items[$foreach.${itemName}.index]; `;
       usedBindings.add(itemName);
-      if (componentContext.context.bindings[itemName].indexName) {
-        bindings += `let ${componentContext.context.bindings[itemName].indexName} = $foreach.${itemName}.index; `;
+      if (componentContext.config.data.context.bindings[itemName].indexName) {
+        bindings += `let ${componentContext.config.data.context.bindings[itemName].indexName} = $foreach.${itemName}.index; `;
         usedBindings.add(itemName);
       }
     }
-    propsComponent = componentContext.componentContext;
+    propsComponent = COMPONENT_MAP.get((componentContext as unknown as ForeachItemComponent).config.data.componentContext)!;
   }
   for (const propName in propsComponent.state.value) {
     if (!usedBindings.has(propName)) {
@@ -437,16 +443,16 @@ function buildComponent(node: AstNode, componentContext: Component): Component[]
     }
   }
 
-  let component: Component;
+  let component: Component<any, any, any>;
   if (typeof node === "string") {
-    component = new TextComponent(node);
+    component = Component.newTextComponent(node);
   } else if (node.type === "script") {
     const script: (value: any, state: any) => any = eval(`(${args}) => { ${bindings}return { textContent: (${node.expr}).toString() }; }`);
-    component = new TextComponent("");
+    component = Component.newTextComponent("");
     component.bind(componentContext, script);
   } else if (node.type === "directive" && node.directive === "if") {
     const f: (value: any, state: any) => any = eval(`(${args}) => { ${bindings}return { cond: (${node.expr}) }; }`);
-    let ifComponent = new If();
+    let ifComponent = Component.newIfComponent();
     ifComponent.bind(componentContext, f);
     for (const child of node.ast) {
       ifComponent.children.push(...buildComponent(child, componentContext));
@@ -454,32 +460,31 @@ function buildComponent(node: AstNode, componentContext: Component): Component[]
     for (const child of node.elseAst ?? []) {
       const elseChild = buildComponent(child, componentContext);
       ifComponent.children.push(...elseChild);
-      elseChild.forEach(e => ifComponent.elseChildren.add(e));
+      elseChild.forEach(e => ifComponent.config.data.elseChildren.add(e.id));
     }
     component = ifComponent;
   } else if (node.type === "directive" && node.directive === "foreach") {
     const f: (value: any, state: any) => any = eval(`(${args}) => { ${bindings}return { items: (${node.expr}) }; }`);
-    const foreachComponent = new Foreach(node.itemName, node.indexName, componentContext);
+    const foreachComponent = Component.newForeachComponent(node.itemName, node.indexName, componentContext);
     foreachComponent.bind(componentContext, f);
-    const foreachItem = new ForeachItem(componentContext, foreachComponent.context, foreachComponent.itemName);
+    const foreachItem = Component.newForeachItemComponent(componentContext, foreachComponent.config.data.context, foreachComponent.config.data.itemName);
     for (const child of node.ast) {
       foreachItem.children.push(...buildComponent(child, foreachItem));
     }
     foreachComponent.children = [foreachItem];
     component = foreachComponent;
   } else if (node.type === "directive" && node.directive === "children") {
-    return componentContext.children;
+    return componentContext.children ?? [];
   } else {
     if (node.tag[0] === node.tag[0].toLowerCase()) {
       const tag = node.tag as keyof HTMLElementTagNameMap;
-      const Constructor = TAGS![tag]!;
-      component = new Constructor(tag);
+      component = TAGS![tag]!(tag);
     } else {
-      const Constructor = componentContext.imports?.[node.tag];
+      const Constructor = componentContext.config.imports?.[node.tag];
       if (!Constructor) {
         throw new Error(`import missing: ${node.tag}`);
       }
-      component = new Constructor();
+      component = Constructor();
     }
     for (const child of node.ast) {
       component.children.push(...buildComponent(child, componentContext));

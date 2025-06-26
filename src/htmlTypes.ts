@@ -20,12 +20,12 @@ export interface HtmlContentComponentProps<
 }
 
 export type HtmlInputProps = HtmlComponentProps<"input"> & {
-  value?: string;
+  value: string;
 };
 
 export type HtmlAProps = HtmlContentComponentProps<"a"> & {
-  href?: string;
-  target?: string;
+  href: string | null;
+  target: string | null;
 };
 
 // export type HtmlChildren<T extends keyof HTMLElementTagNameMap> =

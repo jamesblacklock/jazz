@@ -8,7 +8,7 @@
     "strict": true,
     "declaration": true,
     "outDir": "dist",
-    "target": "es2016",
+    "target": "esnext",
     "module": "umd",
     "moduleResolution": "node"
   },
