@@ -1,5 +1,5 @@
 import ENTITIES from "./htmlEntities";
-import { Component, COMPONENT_MAP, ForeachItemComponent } from "./index";
+import { AnyComponent, Component, HtmlAnchorConfig, HtmlComponentConfig, HtmlInputConfig, System } from "./index";
 
 type Directive = {
   type: "directive";
@@ -262,19 +262,13 @@ function parseTemplate(template: string, inElement: boolean = false): [Ast, stri
   return [ast, remaining] as const;
 }
 
-export function compileTemplate(component: Component<any, any, any>): Component[] {
+export function compileTemplate(component: AnyComponent): AnyComponent[] {
   initTags();
 
-  const ast = parse(component.config.template!);
+  const ast = parse(component.template!);
   const nodes = [];
-  if (component instanceof Component) {
-    for (const astNode of ast) {
-      nodes.push(...buildComponent(astNode, component));
-    }
-  } else {
-    for (const astNode of ast) {
-      nodes.push(...buildComponent(astNode, component));
-    }
+  for (const astNode of ast) {
+    nodes.push(...buildComponent(astNode, component));
   }
   return nodes;
 }
@@ -293,142 +287,143 @@ function initTags() {
   if (TAGS === null) {
     TAGS = {
       // void elements
-      area: Component.newHtmlComponent,
-      base: Component.newHtmlComponent,
-      br: Component.newHtmlComponent,
-      col: Component.newHtmlComponent,
-      embed: Component.newHtmlComponent,
-      hr: Component.newHtmlComponent,
-      img: Component.newHtmlComponent,
-      input: Component.newHtmlInputComponent,
-      link: Component.newHtmlComponent,
-      meta: Component.newHtmlComponent,
-      source: Component.newHtmlComponent,
-      track: Component.newHtmlComponent,
-      wbr: Component.newHtmlComponent,
-    
+      area: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "area" })),
+      base: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "base" })),
+      br: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "br" })),
+      col: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "col" })),
+      embed: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "embed" })),
+      hr: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "hr" })),
+      img: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "img" })),
+      input: () => System.createHtmlComponent(HtmlInputConfig),
+      link: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "link" })),
+      meta: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "meta" })),
+      source: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "source" })),
+      track: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "track" })),
+      wbr: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "wbr" })),
+
       // text elements
-      script: Component.newHtmlComponent,
-      style: Component.newHtmlComponent,
-      textarea: Component.newHtmlComponent,
-      title: Component.newHtmlComponent,
-    
+      script: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "script" })),
+      style: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "style" })),
+      textarea: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "textarea" })),
+      title: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "title" })),
+
       // normal elements
-      a: Component.newHtmlAnchorComponent,
-      abbr: Component.newHtmlComponent,
-      address: Component.newHtmlComponent,
-      article: Component.newHtmlComponent,
-      aside: Component.newHtmlComponent,
-      audio: Component.newHtmlComponent,
-      b: Component.newHtmlComponent,
-      bdi: Component.newHtmlComponent,
-      bdo: Component.newHtmlComponent,
-      blockquote: Component.newHtmlComponent,
-      body: Component.newHtmlComponent,
-      button: Component.newHtmlComponent,
-      canvas: Component.newHtmlComponent,
-      caption: Component.newHtmlComponent,
-      cite: Component.newHtmlComponent,
-      code: Component.newHtmlComponent,
-      colgroup: Component.newHtmlComponent,
-      data: Component.newHtmlComponent,
-      datalist: Component.newHtmlComponent,
-      dd: Component.newHtmlComponent,
-      del: Component.newHtmlComponent,
-      details: Component.newHtmlComponent,
-      dfn: Component.newHtmlComponent,
-      dialog: Component.newHtmlComponent,
-      div: Component.newHtmlComponent,
-      dl: Component.newHtmlComponent,
-      dt: Component.newHtmlComponent,
-      em: Component.newHtmlComponent,
-      fieldset: Component.newHtmlComponent,
-      figcaption: Component.newHtmlComponent,
-      figure: Component.newHtmlComponent,
-      footer: Component.newHtmlComponent,
-      form: Component.newHtmlComponent,
-      h1: Component.newHtmlComponent,
-      h2: Component.newHtmlComponent,
-      h3: Component.newHtmlComponent,
-      h4: Component.newHtmlComponent,
-      h5: Component.newHtmlComponent,
-      h6: Component.newHtmlComponent,
-      head: Component.newHtmlComponent,
-      header: Component.newHtmlComponent,
-      hgroup: Component.newHtmlComponent,
-      html: Component.newHtmlComponent,
-      i: Component.newHtmlComponent,
-      iframe: Component.newHtmlComponent,
-      ins: Component.newHtmlComponent,
-      kbd: Component.newHtmlComponent,
-      label: Component.newHtmlComponent,
-      legend: Component.newHtmlComponent,
-      li: Component.newHtmlComponent,
-      main: Component.newHtmlComponent,
-      map: Component.newHtmlComponent,
-      mark: Component.newHtmlComponent,
-      menu: Component.newHtmlComponent,
-      meter: Component.newHtmlComponent,
-      nav: Component.newHtmlComponent,
-      noscript: Component.newHtmlComponent,
-      object: Component.newHtmlComponent,
-      ol: Component.newHtmlComponent,
-      optgroup: Component.newHtmlComponent,
-      option: Component.newHtmlComponent,
-      output: Component.newHtmlComponent,
-      p: Component.newHtmlComponent,
-      picture: Component.newHtmlComponent,
-      pre: Component.newHtmlComponent,
-      progress: Component.newHtmlComponent,
-      q: Component.newHtmlComponent,
-      rp: Component.newHtmlComponent,
-      rt: Component.newHtmlComponent,
-      ruby: Component.newHtmlComponent,
-      s: Component.newHtmlComponent,
-      samp: Component.newHtmlComponent,
-      search: Component.newHtmlComponent,
-      section: Component.newHtmlComponent,
-      select: Component.newHtmlComponent,
-      slot: Component.newHtmlComponent,
-      small: Component.newHtmlComponent,
-      span: Component.newHtmlComponent,
-      strong: Component.newHtmlComponent,
-      sub: Component.newHtmlComponent,
-      summary: Component.newHtmlComponent,
-      sup: Component.newHtmlComponent,
-      table: Component.newHtmlComponent,
-      tbody: Component.newHtmlComponent,
-      td: Component.newHtmlComponent,
-      template: Component.newHtmlComponent,
-      tfoot: Component.newHtmlComponent,
-      th: Component.newHtmlComponent,
-      thead: Component.newHtmlComponent,
-      time: Component.newHtmlComponent,
-      tr: Component.newHtmlComponent,
-      u: Component.newHtmlComponent,
-      ul: Component.newHtmlComponent,
-      var: Component.newHtmlComponent,
-      video: Component.newHtmlComponent,
+      a: () => System.createHtmlComponent(HtmlAnchorConfig),
+      abbr: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "abbr" })),
+      address: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "address" })),
+      article: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "article" })),
+      aside: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "aside" })),
+      audio: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "audio" })),
+      b: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "b" })),
+      bdi: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "bdi" })),
+      bdo: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "bdo" })),
+      blockquote: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "blockquote" })),
+      body: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "body" })),
+      button: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "button" })),
+      canvas: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "canvas" })),
+      caption: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "caption" })),
+      cite: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "cite" })),
+      code: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "code" })),
+      colgroup: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "colgroup" })),
+      data: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "data" })),
+      datalist: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "datalist" })),
+      dd: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "dd" })),
+      del: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "del" })),
+      details: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "details" })),
+      dfn: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "dfn" })),
+      dialog: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "dialog" })),
+      div: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "div" })),
+      dl: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "dl" })),
+      dt: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "dt" })),
+      em: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "em" })),
+      fieldset: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "fieldset" })),
+      figcaption: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "figcaption" })),
+      figure: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "figure" })),
+      footer: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "footer" })),
+      form: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "form" })),
+      h1: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "h1" })),
+      h2: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "h2" })),
+      h3: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "h3" })),
+      h4: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "h4" })),
+      h5: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "h5" })),
+      h6: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "h6" })),
+      head: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "head" })),
+      header: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "header" })),
+      hgroup: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "hgroup" })),
+      html: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "html" })),
+      i: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "i" })),
+      iframe: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "iframe" })),
+      ins: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "ins" })),
+      kbd: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "kbd" })),
+      label: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "label" })),
+      legend: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "legend" })),
+      li: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "li" })),
+      main: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "main" })),
+      map: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "map" })),
+      mark: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "mark" })),
+      menu: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "menu" })),
+      meter: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "meter" })),
+      nav: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "nav" })),
+      noscript: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "noscript" })),
+      object: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "object" })),
+      ol: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "ol" })),
+      optgroup: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "optgroup" })),
+      option: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "option" })),
+      output: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "output" })),
+      p: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "p" })),
+      picture: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "picture" })),
+      pre: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "pre" })),
+      progress: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "progress" })),
+      q: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "q" })),
+      rp: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "rp" })),
+      rt: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "rt" })),
+      ruby: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "ruby" })),
+      s: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "s" })),
+      samp: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "samp" })),
+      search: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "search" })),
+      section: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "section" })),
+      select: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "select" })),
+      slot: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "slot" })),
+      small: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "small" })),
+      span: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "span" })),
+      strong: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "strong" })),
+      sub: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "sub" })),
+      summary: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "summary" })),
+      sup: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "sup" })),
+      table: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "table" })),
+      tbody: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "tbody" })),
+      td: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "td" })),
+      template: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "template" })),
+      tfoot: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "tfoot" })),
+      th: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "th" })),
+      thead: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "thead" })),
+      time: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "time" })),
+      tr: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "tr" })),
+      u: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "u" })),
+      ul: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "ul" })),
+      var: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "var" })),
+      video: () => System.createHtmlComponent(HtmlComponentConfig({ tag: "video" })),
     } as const;
   }
 }
 
-function buildComponent(node: AstNode, componentContext: Component<any, any, any>): Component[] {
+function buildComponent(node: AstNode, componentContext: AnyComponent): AnyComponent[] {
   let args = "$props, $state";
   let bindings = "";
   const usedBindings = new Set;
   let propsComponent = componentContext;
-  if (componentContext.type === "ForeachItem") {
+  if (componentContext.componentType === "ForeachItem") {
     args += ", $foreach"
-    for (const itemName in componentContext.config.data.context.bindings) {
+    const foreachItem = componentContext as AnyComponent<"ForeachItem">;
+    for (const itemName in foreachItem.data.context.bindings) {
       bindings += `let ${itemName} = $foreach.${itemName}.items[$foreach.${itemName}.index]; `;
       usedBindings.add(itemName);
-      if (componentContext.config.data.context.bindings[itemName].indexName) {
-        bindings += `let ${componentContext.config.data.context.bindings[itemName].indexName} = $foreach.${itemName}.index; `;
+      if (foreachItem.data.context.bindings[itemName].indexName) {
+        bindings += `let ${foreachItem.data.context.bindings[itemName].indexName} = $foreach.${itemName}.index; `;
         usedBindings.add(itemName);
       }
     }
-    propsComponent = COMPONENT_MAP.get((componentContext as unknown as ForeachItemComponent).config.data.componentContext)!;
+    propsComponent = (componentContext as AnyComponent<"ForeachItem">).data.componentContext;
   }
   for (const propName in propsComponent.state.value) {
     if (!usedBindings.has(propName)) {
@@ -443,16 +438,16 @@ function buildComponent(node: AstNode, componentContext: Component<any, any, any
     }
   }
 
-  let component: Component<any, any, any>;
+  let component: any;
   if (typeof node === "string") {
-    component = Component.newTextComponent(node);
+    component = System.createTextComponent(node);
   } else if (node.type === "script") {
     const script: (value: any, state: any) => any = eval(`(${args}) => { ${bindings}return { textContent: (${node.expr}).toString() }; }`);
-    component = Component.newTextComponent("");
+    component = System.createTextComponent("");
     component.bind(componentContext, script);
   } else if (node.type === "directive" && node.directive === "if") {
     const f: (value: any, state: any) => any = eval(`(${args}) => { ${bindings}return { cond: (${node.expr}) }; }`);
-    let ifComponent = Component.newIfComponent();
+    let ifComponent = System.createIfComponent();
     ifComponent.bind(componentContext, f);
     for (const child of node.ast) {
       ifComponent.children.push(...buildComponent(child, componentContext));
@@ -460,18 +455,19 @@ function buildComponent(node: AstNode, componentContext: Component<any, any, any
     for (const child of node.elseAst ?? []) {
       const elseChild = buildComponent(child, componentContext);
       ifComponent.children.push(...elseChild);
-      elseChild.forEach(e => ifComponent.config.data.elseChildren.add(e.id));
+      elseChild.forEach(e => ifComponent.data.elseChildren.add(e.id));
     }
     component = ifComponent;
   } else if (node.type === "directive" && node.directive === "foreach") {
     const f: (value: any, state: any) => any = eval(`(${args}) => { ${bindings}return { items: (${node.expr}) }; }`);
-    const foreachComponent = Component.newForeachComponent(node.itemName, node.indexName, componentContext);
+    const foreachComponent = System.createForeachComponent(node.itemName, node.indexName, componentContext);
     foreachComponent.bind(componentContext, f);
-    const foreachItem = Component.newForeachItemComponent(componentContext, foreachComponent.config.data.context, foreachComponent.config.data.itemName);
+    const foreachItem = System.createForeachItemComponent(componentContext, foreachComponent.data.context, foreachComponent.data.itemName);
     for (const child of node.ast) {
       foreachItem.children.push(...buildComponent(child, foreachItem));
     }
     foreachComponent.children = [foreachItem];
+    foreachComponent.data.foreachItemComponent = foreachItem;
     component = foreachComponent;
   } else if (node.type === "directive" && node.directive === "children") {
     return componentContext.children ?? [];
@@ -480,7 +476,7 @@ function buildComponent(node: AstNode, componentContext: Component<any, any, any
       const tag = node.tag as keyof HTMLElementTagNameMap;
       component = TAGS![tag]!(tag);
     } else {
-      const Constructor = componentContext.config.imports?.[node.tag];
+      const Constructor = componentContext.imports?.[node.tag];
       if (!Constructor) {
         throw new Error(`import missing: ${node.tag}`);
       }

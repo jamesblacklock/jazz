@@ -79,7 +79,8 @@ struct ComponentId(u32);
 struct State<P: Q> {
   props: Props<P>,
   next_value: Cell<Option<P>>,
-  component: RefCell<AnyComponentWeak>,
+  component: Cell<Option<Weak<dyn StateComponentImplTrait<P>>>>,
+  frame: Cell<Option<AnimationFrame>>,
 }
 
 impl <P: Q> State<P> {
@@ -87,7 +88,8 @@ impl <P: Q> State<P> {
     State {
       props: Props::new(value),
       next_value: Cell::new(None),
-      component: RefCell::new(AnyComponentWeak::new_empty()),
+      component: Cell::new(None),
+      frame: Default::default(),
     }
   }
   fn value(&self) -> P {
@@ -98,15 +100,20 @@ impl <P: Q> State<P> {
     self.update();
   }
   fn update(&self) {
-    // if (this.frame === null) {
-    //   this.frame = requestAnimationFrame(() => {
-    //     this.frame = null;
-    //     if (this.nextValue) {
-    //       this.component.update(undefined, this.nextValue);
-    //       this.nextValue = null;
-    //     }
-    //   });
-    // }
+    if let Some(frame) = self.frame.replace(None) {
+      self.frame.replace(Some(frame));
+    } else {
+      let frame = request_animation_frame(|| {
+        self.frame.replace(None);
+        if let Some(next_value) = self.next_value.replace(None) {
+          if let Some(Some(c)) = self.component.replace(None).map(|c| c.upgrade()) {
+            StateComponentImplTrait::update(c.clone(), next_value);
+            self.component.replace(Some(Rc::downgrade(&c)));
+          }
+        }
+      });
+      self.frame.replace(Some(frame));
+    }
   }
 }
 
@@ -202,11 +209,44 @@ impl ComponentSystem {
     self.component_map.insert(id, component.any());
     component
   }
+
+  // static newHtmlInputComponent(): HtmlComponent<"input", HtmlInputProps, { value: string }> {
+  //   const component: HtmlComponent<"input", HtmlInputProps, { value: string }> = Component.newHtmlComponent("input", { value: "" }, { value: "" });
+  //   component.config.data.domNode.addEventListener("input", e => component.update(undefined, { value: (e.target as any).value } as any));
+  //   component.config.onUpdated = (component: HtmlComponent<"input", HtmlInputProps, { value: string }>, prevProps: HtmlInputProps) => {
+  //     onHtmlPropsChanged(component);
+  //     if (prevProps.value !== component.props.value.value) {
+  //       component.config.data.domNode.value = component.props.value.value;
+  //       component.state.set.value(component.props.value.value ?? "");
+  //     }
+  //   }
+  // }
+
+  // static newHtmlAnchorComponent(): HtmlComponent<"a", HtmlAProps> {
+  //   const component = Component.newHtmlComponent("a", { href: null, target: null });
+  //   component.config.onUpdated = ((component: HtmlComponent<"a", HtmlAProps>, prevProps: HtmlAProps) => {
+  //     onHtmlPropsChanged(component);
+  //     const props = component.props.value;
+  //     const { href, target } = props;
+  //     if (href === null) {
+  //       component.config.data.domNode.removeAttribute("href");
+  //     } else {
+  //       component.config.data.domNode.href = href;
+  //     }
+  //     if (target === null) {
+  //       component.config.data.domNode.removeAttribute("target");
+  //     } else {
+  //       component.config.data.domNode.target = target;
+  //     }
+  //   }) as any;
+  //   return component as any;
+  // }
 }
 
 trait ComponentConfig<P: Q = (), S: Q = ()> {
   fn name() -> String;
   fn render(_component: &Component<P, S>) -> Vec<AnyComponent> { Vec::new() }
+  // imports?: Record<string, () => BoxedComponent>;
   fn on_created(_component: &Component<P, S>) {}
   fn on_inserted(_component: &Component<P, S>) {}
   fn on_updated(_component: &Component<P, S>, _prev_props: P, _prev_state: S) {}
@@ -222,10 +262,6 @@ macro_rules! foreach_event_name {
       let event = $props.events.as_ref().and_then(|events| events.click.clone());
       let attached_event = &mut $attached_events.click;
       ($body)(event_name, event, attached_event);
-      // let event_name = "click";
-      // let event = $props.events.as_ref().and_then(|events| events.click.clone());
-      // let attached_event = &mut $attached_events.click;
-      // ($body)(event_name, event, attached_event);
     };
   } 
 }
@@ -418,8 +454,8 @@ struct BindingCell(Rc<Cell<Option<AnyComponentWeak>>>);
 
 impl BindingCell {
   fn take(&self) -> Option<AnyComponent> {
-    if let Some(Some(c)) = self.0.replace(None).map(|c| c.0) {
-      return c.upgrade().map(|c| AnyComponent(c))
+    if let Some(c) = self.0.replace(None) {
+      return c.upgrade();
     }
     None
   }
@@ -476,10 +512,65 @@ impl <P: Q, S: Q, Config: 'static + ComponentConfig<P, S>> ComponentImpl<P, S, C
       config,
       id,
     }));
-    component.set_state_component(component.weak());
+    // this.display = { _visible: false };
+    // this.imports = mapValues(config.imports ?? {}, c => c.id);
+    component.set_state_component();
     component.on_created();
     component
   }
+  // clone(index?: number, foreachItem?: ForeachItemComponent): Component<any, any, any> {
+  //   const config = { ...this.config };
+  //   if (this.config.data) {
+  //     config.data = { ...this.config.data };
+  //   }
+  //   if (this.type === "Html") {
+  //     (config.data as any).domNode = document.createElement((config.data as any).tag);
+  //     (config.data as any).attachedEvents = {};
+  //     (config.data as any).savedStyle = {};
+  //   } else if (this.type === "Text") {
+  //     (config.data as any).domNode = document.createTextNode(this.props.value.textContent.toString());
+  //   }
+
+  //   const clone = new Component(config);
+  //   clone.type = this.type;
+  //   clone.props.dirty = true;
+  //   clone.domParent = this.domParent;
+  //   clone.renderOptions = this.renderOptions;
+  //   clone.display = this.display;
+  //   clone.children = [];
+
+  //   if (this.props.binding) {
+  //     const source = COMPONENT_MAP.get(this.props.binding.source)!;
+  //     clone.props.binding = this.props.binding.clone();
+  //     clone.bindingId = Symbol();
+  //     source.desc.push(clone.bindingId);
+  //   }
+
+  //   if (this.type === "ForeachItem") {
+  //     const thisForeach = this as unknown as ForeachItemComponent;
+  //     let context = thisForeach.config.data.context;
+  //     if (foreachItem) {
+  //       context = cloneForeachContext(foreachItem?.config.data.context);
+  //       context.bindings[thisForeach.config.data.itemName] = { ...thisForeach.config.data.context.bindings[thisForeach.config.data.itemName] };
+  //       index = undefined;
+  //     }
+  //     // clone.config.data!.componentContext = thisForeach.config.data.componentContext;
+  //     // clone.config.data!.itemName = thisForeach.config.data.itemName;
+  //     clone.config.data!.context = cloneForeachContext(context, thisForeach.config.data.itemName, index);
+  //     foreachItem = clone as unknown as ForeachItemComponent;
+  //   }
+
+  //   for (const child of this.children ?? []) {
+  //     const childClone = child.clone(index, foreachItem);
+  //     if (this.type === "If" && (this as unknown as IfComponent).config.data.elseChildren.has(child.id)) {
+  //       (clone as unknown as IfComponent).config.data.elseChildren.add(childClone.id);
+  //     }
+  //     clone.children.push(childClone);
+  //   }
+
+  //   clone.bindForeachContext(foreachItem);
+  //   return clone;
+  // }
   fn updating(&self) -> bool {
     let updating = self.updating.replace(true);
     self.updating.replace(updating);
@@ -557,9 +648,13 @@ trait AnyComponentImplTrait {
   fn update(self: Rc<Self>) -> bool;
 }
 
-trait ComponentImplTrait<P: Q, S: Q>: AnyComponentImplTrait {
+trait StateComponentImplTrait<S: Q>: AnyComponentImplTrait {
+  fn update(self: Rc<Self>, new_state: S);
+}
+
+trait ComponentImplTrait<P: Q, S: Q>: StateComponentImplTrait<S> {
   fn update(self: Rc<Self>, new_props: Option<P>, new_state: Option<S>) -> bool;
-  fn set_state_component(&self, weak: AnyComponentWeak);
+  fn set_state_component(self: Rc<Self>);
   fn on_created(self: Rc<Self>);
   fn props(&self) -> P;
   fn state(&self) -> &State<S>;
@@ -578,7 +673,7 @@ impl <P: Q, S: Q, Config: 'static + ComponentConfig<P, S>> AnyComponentImplTrait
     self.id
   }
   fn visible(&self) -> bool {
-    // self.visible()
+    /*this.display._visible*/
     true
   }
   fn set_visible(self: Rc<Self>, visible: bool) {
@@ -604,12 +699,19 @@ impl <P: Q, S: Q, Config: 'static + ComponentConfig<P, S>> AnyComponentImplTrait
   }
 }
 
+impl <P: Q, S: Q, Config: 'static + ComponentConfig<P, S>> StateComponentImplTrait<S> for ComponentImpl<P, S, Config> {
+  fn update(self: Rc<Self>, new_state: S) {
+    ComponentImpl::update(self, None, Some(new_state));
+  }
+}
+
 impl <P: Q, S: Q, Config: 'static + ComponentConfig<P, S>> ComponentImplTrait<P, S> for ComponentImpl<P, S, Config> {
   fn update(self: Rc<Self>, new_props: Option<P>, new_state: Option<S>) -> bool {
     ComponentImpl::update(self, new_props, new_state)
   }
-  fn set_state_component(&self, weak: AnyComponentWeak) {
-    self.state.component.replace(weak);
+  fn set_state_component(self: Rc<Self>) {
+    let c: Rc<dyn StateComponentImplTrait<S>> = self.clone();
+    self.state.component.replace(Some(Rc::downgrade(&c)));
   }
   fn on_created(self: Rc<Self>) {
     Config::on_created(&Component(self.clone()));
@@ -643,8 +745,8 @@ impl <P: Q, S: Q> Component<P, S> {
   fn weak(&self) -> AnyComponentWeak {
     self.any().weak()
   }
-  fn set_state_component(&self, weak: AnyComponentWeak) {
-    self.0.set_state_component(weak);
+  fn set_state_component(&self) {
+    self.0.clone().set_state_component();
   }
   fn on_created(&self) {
     ComponentImplTrait::on_created(self.0.clone());
@@ -752,6 +854,12 @@ impl AnyComponentWeak {
   fn new_empty() -> AnyComponentWeak {
     AnyComponentWeak(None)
   }
+  fn upgrade(self) -> Option<AnyComponent> {
+    if let Some(Some(c)) = self.0.map(|c| c.upgrade()) {
+      return Some(AnyComponent(c))
+    }
+    None
+  }
 }
 
 struct Callback<Arg0>(Option<Rc<dyn Fn(Arg0)>>);
@@ -842,6 +950,11 @@ impl HtmlTextNode {
   fn set_text_content<S: Into<String>>(&self, text_content: S) {}
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+struct AnimationFrame(u32);
+
+fn request_animation_frame(f: impl Fn()) -> AnimationFrame { AnimationFrame(0) }
+
 struct HtmlEvent;
 
 impl HtmlEvent {
@@ -876,6 +989,7 @@ impl ComponentConfig<HtmlTextProps> for HtmlText {
 }
 
 macro_rules! html_props_no_impl {
+  ($struct:ident) => { html_props_no_impl!($struct {}); };
   ($struct:ident {$( $field:ident:$type:ty ),*}) => {
     #[derive(Default, Clone, PartialEq, Eq)]
     struct $struct {
@@ -908,7 +1022,7 @@ macro_rules! html_props {
 
 struct HtmlInput;
 
-html_props_no_impl!(HtmlProps {});
+html_props_no_impl!(HtmlProps);
 
 html_props!(HtmlInputProps { value: String });
 
@@ -1025,6 +1139,208 @@ impl ComponentConfig for ForeachItem {
     component.children().clone()
   }
 }
+
+// type ForeachContext = {
+//   init: boolean;
+//   bindings: {
+//     [key: string]: {
+//       items: any[];
+//       index: number | null;
+//       indexName?: string;
+//     };
+//   };
+// };
+
+// function cloneForeachContext(context: ForeachContext, itemName?: string, index?: number) {
+//   const result: ForeachContext = { init: index != null, bindings: {} };
+//   for (const name in context.bindings) {
+//     result.bindings[name] = { ...context.bindings[name] };
+//   }
+//   if (itemName !== undefined && index !== undefined) {
+//     result.bindings[itemName].index = index;
+//   }
+//   return result;
+// }
+
+// let renderQueueTimer: number | null = null;
+// let renderQueue: Component[] = [];
+
+// function requestRender(n: Component) {
+//   renderQueue.push(n);
+//   if (renderQueueTimer === null) {
+//     renderQueueTimer = requestAnimationFrame(() => {
+//       const rendered = new Set;
+//       for (const node of renderQueue) {
+//         if (rendered.has(node)) {
+//           continue;
+//         }
+//         rendered.add(node);
+//         render(node);
+//         // while (renderState.changedDuringRender.size > 0) {
+//         //   const reRender = renderState.changedDuringRender;
+//         //   renderState = {r: Symbol(), options, changedDuringRender: new Set};
+//         //   for (const node of reRender) {
+//         //     node.state!.commit();
+//         //     render(renderState, node, node.component);
+//         //     renderState = {r: Symbol(), options, changedDuringRender: renderState.changedDuringRender};
+//         //   }
+//         // }
+//         updateHtml(node);
+//       }
+//       renderQueueTimer = null;
+//       renderQueue = [];
+//     // });
+//     });
+//   }
+// }
+
+// function updateHtml(
+//   component: Component<any, any, any>,
+//   nextSibling: Node | null = null,
+//   checkSiblings: boolean = false,
+// ): Node | null {
+//   if (!component.visible) {
+//     removeNode(component);
+//     return nextSibling;
+//   }
+//   const isDomNode = component.type === "Text" || component.type === "Html";
+//   let domNode: Text | HTMLElement;
+//   if (isDomNode) {
+//     domNode = (component as unknown as TextComponent).config.data.domNode;
+//     const contained = component.domParent!.contains(domNode);
+//     const siblingOk = !checkSiblings || domNode.nextSibling === nextSibling;
+//     if (!contained || !siblingOk) {
+//       component.domParent!.insertBefore(domNode, checkSiblings ? nextSibling : null);
+//     }
+//   }
+//   let childCheckSiblings = !!(isDomNode || checkSiblings);
+//   let lastInserted: Node | null = isDomNode ? null : nextSibling;
+//   for (const childId of reversed(component.nodes ?? [])) {
+//     const childNode = COMPONENT_MAP.get(childId)!;
+//     const isPortalChild = false; // childNode.domParent !== (node.domNode ?? node.domParent);
+//     const res = updateHtml(childNode, lastInserted, childCheckSiblings && !isPortalChild);
+//     if (!isPortalChild) {
+//       lastInserted = res ?? lastInserted;
+//       childCheckSiblings = true;
+//     }
+//   }
+
+//   return isDomNode ? domNode! : lastInserted;
+// }
+
+// function removeNode(component: Component) {
+//   // node.portalChildren.forEach(removeNode);
+//   if (component.type === "Text" || component.type === "Html") {
+//     (component as unknown as TextComponent).config.data.domNode.remove();
+//     return;
+//   }
+//   component.nodes?.forEach(id => removeNode(COMPONENT_MAP.get(id)!));
+// }
+
+// function render(component: Component) {
+//   if (!component.visible) {
+//     component.update();
+//     return;
+//   }
+
+//   // if (component.type === "Text") {
+//   //   const textContent: string = component.props.value.textContent.toString();
+//   //   if (!component.domNode) {
+//   //     component.domNode = document.createTextNode(textContent);
+//   //   }
+//   //   if (textContent !== component.domNode.textContent) {
+//   //     component.domNode.textContent = textContent;
+//   //   }
+//   // } else {
+//     if (!component.nodes || component.type === "If") {
+//       const rendered = component.render();
+//       component.nodes = rendered.map(c => c.id);
+//       const isForeach = component.type === "Foreach";
+//       for (const childId of component.nodes) {
+//         const child = COMPONENT_MAP.get(childId)!;
+//         child.domParent = component.type === "Html" ? (component as unknown as HtmlComponent<any>).config.data.domNode : component.domParent;
+//         child.renderOptions = component.renderOptions;
+//         if (component.type !== "If") {
+//           child.display = component.display;
+//         }
+//         if (isForeach) {
+//           continue;
+//         }
+//         child.update();
+//         render(child);
+//       }
+//       component.update();
+//     }
+
+//     if (component.type === "Foreach") {
+//       const foreach = component as unknown as ForeachComponent<any>;
+//       const nodes = component.nodes ?? [];
+//       while (nodes.length > foreach.config.data.items.length) {
+//         const nodeId = nodes.pop()!;
+//         removeNode(COMPONENT_MAP.get(nodeId)!);
+//       }
+//       const child = component.children[0] as unknown as ForeachItemComponent;
+//       for (let i = 0; i < foreach.config.data.items.length; i++) {
+//         let clone;
+//         if (i < nodes.length) {
+//           clone = COMPONENT_MAP.get(nodes[i])!;
+//           // clone.bindForeachContext(component);
+//         } else {
+//           clone = child.clone(i);
+//         }
+//         if (i >= nodes.length) {
+//           nodes.push(clone.id);
+//         }
+//       }
+//       component.nodes = nodes;
+
+//       for (const nodeId of component.nodes) {
+//         const node = COMPONENT_MAP.get(nodeId)!;
+//         render(node);
+//         node.update();
+//       }
+//   //  }
+//   // const renderedNodes: VNode[] = [];
+//   // const portalChildren: VNode[] = [];
+//   // for (const childComponent of component.content) {
+//   //   const childNode = getNode(node, childComponent, renderedNodes);
+//   //   if (childComponent.domParent) {
+//   //     portalChildren.push(childNode);
+//   //   }
+//   //   if (nodeChanged(childNode, childComponent)) {
+//   //     render(state, childNode, childComponent);
+//   //   }
+//   //   portalChildren.push(...childNode.portalChildren);
+//   // }
+//   // for (const n of node.nodes) {
+//   //   if (n.r !== node.r) {
+//   //     removeNode(n);
+//   //   }
+//   // }
+//   // node.nodes = renderedNodes;
+//   // node.portalChildren = portalChildren;
+//   }
+
+//   component.rc++;
+// }
+
+// // export function createPortal(node: UINode, domParent: HTMLElement, key?: any): UINode {
+// //   return { type: () => node, key, domParent, content: null, props: null };
+// // }
+
+// const DOM_ROOTS = new Map<Node, Component>;
+
+// export function mountComponent(domTarget: HTMLElement, node: Component<any, any>, options: RenderOptions = {}) {
+//   DOM_ROOTS.set(domTarget, node);
+//   node.domParent = domTarget;
+//   node.renderOptions = options;
+//   node.setVisible(true);
+//   requestRender(node);
+// }
+
+// export default {
+//   mountComponent,
+// };
 
 #[derive(Clone, PartialEq, Eq, Default)]
 struct Card { front: String, back: String }

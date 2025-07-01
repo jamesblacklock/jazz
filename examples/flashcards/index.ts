@@ -1,7 +1,9 @@
 import jazz, {
   Component,
+  ComponentConfig,
   State,
   StyleMap,
+  System,
   // ConcreteHtmlComponent,
   // Foreach,
   // HtmlComponent,
@@ -69,97 +71,91 @@ type ChooseDeckState = {
   buttonStyle: StyleMap;
 };
 
-type ChooseDeck = Component<ChooseDeckProps, ChooseDeckState>
-
-function ChooseDeck(): ChooseDeck {
-  return new Component({
-    name: "ChooseDeck",
-    props: { deckIndex: null, chooseDeck: () => null },
-    state: {
-      storedDecks: [],
-      staticDecks: DECKS,
-      removeDeckClicked: ($state: State<ChooseDeckState>, i: number) => {
-        removeDeck(i);
-        $state.set.storedDecks(loadStoredDecks());
-      },
-      chooseDeckClicked: ($props: ChooseDeckProps, e: Event, deck: Deck) => {
-        e.preventDefault();
-        $props.chooseDeck!(deck);
-      },
-      aStyle: { color: "#5959af" },
-      buttonStyle: {
-        color: "red",
-        background: "transparent",
-        border: "none",
-        cursor: "pointer",
-        fontSize: "20px",
-      },
+const ChooseDeck: ComponentConfig<ChooseDeckProps, ChooseDeckState> = {
+  name: "ChooseDeck",
+  props: { deckIndex: null, chooseDeck: () => null },
+  state: {
+    storedDecks: [],
+    staticDecks: DECKS,
+    removeDeckClicked: ($state: State<ChooseDeckState>, i: number) => {
+      removeDeck(i);
+      $state.set.storedDecks(loadStoredDecks());
     },
-    onInserted(component: ChooseDeck) {
-      const { deckIndex, chooseDeck } = component.props.value;
-      const storedDecks = loadStoredDecks();
-      component.state.set.storedDecks(storedDecks);
-      if (deckIndex !== null && deckIndex >= 0) {
-        if (deckIndex < DECKS.length) {
-          chooseDeck(DECKS[deckIndex]);
-        } else if (deckIndex - DECKS.length < storedDecks.length) {
-          chooseDeck(storedDecks[deckIndex - DECKS.length]);
-        }
+    chooseDeckClicked: ($props: ChooseDeckProps, e: Event, deck: Deck) => {
+      e.preventDefault();
+      $props.chooseDeck!(deck);
+    },
+    aStyle: { color: "#5959af" },
+    buttonStyle: {
+      color: "red",
+      background: "transparent",
+      border: "none",
+      cursor: "pointer",
+      fontSize: "20px",
+    },
+  },
+  onInserted(component) {
+    const { deckIndex, chooseDeck } = component.props.value;
+    const storedDecks = loadStoredDecks();
+    component.state.set.storedDecks(storedDecks);
+    if (deckIndex !== null && deckIndex >= 0) {
+      if (deckIndex < DECKS.length) {
+        chooseDeck(DECKS[deckIndex]);
+      } else if (deckIndex - DECKS.length < storedDecks.length) {
+        chooseDeck(storedDecks[deckIndex - DECKS.length]);
       }
-    },
-    template: /*jsx*/`
-      <table>
-        @foreach {deck in staticDecks} {
-          <tr>
-            <td><button style={{...buttonStyle, visibility: "hidden"}}>&times;</button></td>
-            <td><a href="" style={aStyle} events={{click: e => chooseDeckClicked($props, e, deck)}}>{deck.name}</a></td>
-          </tr>
-        }
-        @foreach {deck, i in storedDecks} {
-          <tr>
-            <td><button style={buttonStyle} events={{click: () => removeDeckClicked($state, i)}}>&times;</button></td>
-            <td><a href="" style={aStyle} events={{click: e => chooseDeckClicked($props, e, deck)}}>{deck.name}</a></td>
-          </tr>
-        }
-      </table>
-    `,
-  });
+    }
+  },
+  template: /*jsx*/`
+    <table>
+      @foreach {deck in staticDecks} {
+        <tr>
+          <td><button style={{...buttonStyle, visibility: "hidden"}}>&times;</button></td>
+          <td><a href="" style={aStyle} events={{click: e => chooseDeckClicked($props, e, deck)}}>{deck.name}</a></td>
+        </tr>
+      }
+      @foreach {deck, i in storedDecks} {
+        <tr>
+          <td><button style={buttonStyle} events={{click: () => removeDeckClicked($state, i)}}>&times;</button></td>
+          <td><a href="" style={aStyle} events={{click: e => chooseDeckClicked($props, e, deck)}}>{deck.name}</a></td>
+        </tr>
+      }
+    </table>
+  `,
+};
+
+type AppState = {
+  deckIndex: number | null;
+  deck: Deck | null;
+  saveDeck: (name: string, cards: Card[]) => void;
 }
 
-// type AppState = {
-//   deckIndex: number | null;
-//   deck: Deck | null;
-//   saveDeck: (name: string, cards: Card[]) => void;
-// }
+const App: ComponentConfig<{}, AppState> = {
+  name: "App",
+  props: {},
+  state: { deckIndex: null, deck: null, saveDeck },
+  imports: { ChooseDeck: () => System.createComponent(ChooseDeck), FlashCards: () => System.createComponent(FlashCards) },
+  template: /*jsx*/`
+    @if {deck === null} {
+      <ChooseDeck deckIndex={deckIndex} chooseDeck={deck => $state.set.deck(deck)}/>
+    } @else {
+      <FlashCards
+        cards={deck.cards}
+        name={deck.name}
+        chooseDeck={() => $state.set.deck(null)}
+        saveDeck={saveDeck}
+      />
+    }
+  `,
+  // render() {
+  //   const input = Component.newHtmlInputComponent();
+  //   const text = Component.newTextComponent("hello, world!");
+  //   text.bind(input, (props, state) => ({ textContent: state.value.value }))
+  //   const span = Component.newHtmlComponent("span");
+  //   span.children = [input, text];
+  //   return [span];
+  // }
+};
 
-function App() {
-  return new Component({
-    name: "App",
-    props: {},
-    state: { deckIndex: null, deck: null, saveDeck },
-    imports: { ChooseDeck, FlashCards },
-    template: /*jsx*/`
-      @if {deck === null} {
-        <ChooseDeck deckIndex={deckIndex} chooseDeck={deck => $state.set.deck(deck)}/>
-      } @else {
-        <FlashCards
-          cards={deck.cards}
-          name={deck.name}
-          chooseDeck={() => $state.set.deck(null)}
-          saveDeck={saveDeck}
-        />
-      }
-    `,
-    // render() {
-    //   const input = Component.newHtmlInputComponent();
-    //   const text = Component.newTextComponent("hello, world!");
-    //   text.bind(input, (props, state) => ({ textContent: state.value.value }))
-    //   const span = Component.newHtmlComponent("span");
-    //   span.children = [input, text];
-    //   return [span];
-    // }
-  });
-}
-
-(window as any).App = App();
+(window as any).App = System.createComponent(App);
 jazz.mountComponent(document.body, (window as any).App);
